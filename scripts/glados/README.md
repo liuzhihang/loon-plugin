@@ -47,6 +47,8 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/glados.lpx
 
 启用插件及已有的 MitM 证书，登录后刷新控制台，确认收到抓取通知。抓取规则读取账号状态响应，不修改服务器返回内容。旧 Cookie 数组自动兼容；只有确认属于同一邮箱的旧会话才会被替换，无法识别的旧账号会保留。
 
+通过 iCloud 替换插件地址后，若请求记录只有 `glados.one:443` 等 TCP 连接、没有完整的 `/api/user/status` URL 和抓取任务，可断开并重新连接 Loon，再刷新控制台。插件列表已更新不代表旧连接已应用新的 MitM 规则。以抓取日志中的“账号 Cookie 已更新”和后续签到接口结果为准；当天已签到时返回“重复签到”属于正常结果。
+
 ### Surge
 
 ```ini
