@@ -69,7 +69,8 @@ hostname = %APPEND% glados.network, railgun.info, glados.vip, glados.one, glados
 ## 注意事项
 
 - 积分 ≥500 时自动兑换 plan500
-- 出现 `Automated check-in detected` 或重新登录提示时，先在网站验证登录状态，再刷新控制台更新 Cookie；脚本不会绕过服务端限制。
+- 出现 `Automated check-in detected` 时，说明服务器已拒绝当次自动签到。应暂停定时任务，在官网核实账号与规则；重新登录或更新 Cookie 不代表自动化获准，也不保证不会再次触发限制。
+- 普通会话过期时，可在网站验证登录状态并刷新控制台更新 Cookie；脚本不会绕过服务端限制。
 - 日志中的 Stored 仅代表本地存在凭据，账户接口和签到接口的验证结果分别处理。
 - 积分兑换在需要重新登录时跳过；其他情况下维持原 ≥500 自动兑换行为。
 
