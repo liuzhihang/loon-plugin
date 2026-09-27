@@ -1,21 +1,22 @@
 /****************************** 
 脚本功能：V2EX 每日签到
-Version  : v1.2.0
-更新时间：2026-05-31
+Version  : v1.3.0
+更新时间：2026-09-27
 作者：Curtinp118
 Platform : Quantumult X / Loon / Surge
 
 使用说明：
-访问 V2EX 个人主页保存 Cookie，定时任务自动签到领取铜币。
+登录后访问 /mission/daily 保存 Cookie、域名和 User-Agent，定时任务在同一域名签到。
+支持 edge.v2ex.com 的 Passkey 登录会话；脚本不读取或保存 Passkey。
 
 [rewrite_local]
-^https://www\.v2ex\.com/(mission|member).* url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js
+^https://(?:(?:www|edge)\.)?v2ex\.com/mission/daily(?:\?.*)?$ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js
 
 [task_local]
 10 9 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js, tag=V2EX 每日签到, enabled=true
 
 [MITM]
-hostname = %APPEND% www.v2ex.com
+hostname = %APPEND% www.v2ex.com, edge.v2ex.com, v2ex.com
 *******************************/
 
 // ========== 三端适配层 ==========
@@ -30,7 +31,7 @@ var $http = {
       var method = (opts.method || "GET").toUpperCase();
       var handler = function (err, resp, data) {
         if (err) reject(err);
-        else resolve({ statusCode: resp.statusCode, headers: resp.headers, body: data });
+        else resolve({ statusCode: resp.status || resp.statusCode, headers: resp.headers, body: data });
       };
       if (method === "POST") $httpClient.post(opts, handler);
       else $httpClient.get(opts, handler);
@@ -62,8 +63,8 @@ var Logger = {
 
   envCheck: function (cookieValid, tokenStatus) {
     console.log("📂 Environment");
-    console.log("- Cookie : " + (cookieValid ? "Valid" : "Invalid"));
-    console.log("- Token  : " + tokenStatus);
+    console.log("- Cookie : " + (cookieValid ? "Stored (not yet verified)" : "Missing"));
+    console.log("- Session: " + tokenStatus);
     console.log("------------------------------------");
   },
 
@@ -99,8 +100,9 @@ var Logger = {
 
 // ========== 工具函数 ==========
 var SCRIPT_NAME = "V2EX";
-var SCRIPT_VERSION = "v1.2.0";
+var SCRIPT_VERSION = "v1.3.0";
 var COOKIE_KEY = "V2EX_Cookie";
+var SESSION_KEY = "V2EX_Session";
 var HOST = "www.v2ex.com";
 var isGetHeader = typeof $request !== "undefined";
 
@@ -110,7 +112,7 @@ var COMMON_HEADERS = {
   "cache-control": "max-age=0",
   "pragma": "no-cache",
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-  "Referer": "https://www.v2ex.com/"
+  "Referer": "https://www.v2ex.com/mission/daily"
 };
 
 function safeJsonParse(str) {
@@ -136,28 +138,59 @@ function getStoredCookie() {
   } catch (e) { return ""; }
 }
 
-function saveCookie(cookie) {
-  try {
-    if (!cookie) return false;
-    var oldCookie = getStoredCookie();
-    if (oldCookie !== cookie) {
-      $store.write(cookie, COOKIE_KEY);
-      return true;
-    }
-    return false;
-  } catch (e) { return false; }
+function allowedHost(host) {
+  return /^(?:(?:www|edge)\.)?v2ex\.com$/.test(host);
 }
 
-function buildHeaders(cookie) {
+function readHeader(headers, name) {
+  var key = Object.keys(headers || {}).filter(function (key) { return key.toLowerCase() === name.toLowerCase(); })[0];
+  return key ? headers[key] : "";
+}
+
+function getSession() {
+  var raw = $store.read(SESSION_KEY);
+  if (raw) {
+    var session = safeJsonParse(raw);
+    return session && allowedHost(session.host) && typeof session.cookie === "string" && session.cookie.trim() ? session : null;
+  }
+  // 旧版 Cookie 只用于原来的 www 域名，不猜测它是否能跨域使用。
+  var cookie = getStoredCookie();
+  return cookie ? { host: "www.v2ex.com", cookie: cookie, userAgent: "" } : null;
+}
+
+function saveSession(session) {
+  var value = JSON.stringify(session);
+  if ($store.read(SESSION_KEY) === value) return false;
+  if (!$store.write(value, SESSION_KEY)) throw new Error("本地存储写入失败");
+  return true;
+}
+
+function buildHeaders(session) {
   var h = {};
   for (var k in COMMON_HEADERS) { h[k] = COMMON_HEADERS[k]; }
-  h["Cookie"] = cookie;
+  h["Cookie"] = session.cookie;
+  h["User-Agent"] = session.userAgent || COMMON_HEADERS["User-Agent"];
+  h["Referer"] = "https://" + session.host + "/mission/daily";
   return h;
 }
 
 // ========== 网络请求 ==========
-function fetchUrl(url, headers) {
-  return $http.fetch({ url: url, headers: headers, method: "GET" }).then(function (resp) {
+function fetchUrl(url, headers, redirects) {
+  var opts = { url: url, headers: headers, method: "GET" };
+  if (isLoon) {
+    opts["auto-cookie"] = false;
+    opts["auto-redirect"] = false;
+    opts.insecure = false;
+  }
+  return $http.fetch(opts).then(function (resp) {
+    if (resp.statusCode >= 300 && resp.statusCode < 400) {
+      var location = readHeader(resp.headers, "Location");
+      var base = "https://" + HOST;
+      if (/^\/(?!\/)/.test(location)) location = base + location;
+      if (location.indexOf(base + "/") !== 0 || (redirects || 0) >= 3) throw new Error("重定向异常，请在已登录域名重新抓取会话");
+      return fetchUrl(location, headers, (redirects || 0) + 1);
+    }
+    if (resp.statusCode !== 200) throw new Error("HTTP " + resp.statusCode);
     return resp.body || "";
   });
 }
@@ -182,8 +215,7 @@ function formatBalance(html) {
   } catch (e) { return ""; }
 }
 
-function getOnce(headers) {
-  return fetchUrl("https://www.v2ex.com/mission/daily", headers).then(function (html) {
+function parseDaily(html) {
     if (!html) return { once: "", logged_in: false, already: false, days: "?" };
     if (html.includes("你要查看的页面需要先登录") || html.includes("需要先登录")) {
       return { once: "", logged_in: false, already: false, days: "?" };
@@ -193,19 +225,22 @@ function getOnce(headers) {
     if (html.includes("每日登录奖励已领取")) {
       return { once: "", logged_in: true, already: true, days: days };
     }
-    var onceMatch = html.match(/once=(\d+)/);
+    var onceMatch = html.match(/\/mission\/daily\/redeem\?once=(\d+)/);
     return { once: onceMatch ? onceMatch[1] : "", logged_in: true, already: false, days: days };
-  });
+}
+
+function getOnce(headers) {
+  return fetchUrl("https://" + HOST + "/mission/daily", headers).then(parseDaily);
 }
 
 function queryBalance(headers) {
-  return fetchUrl("https://www.v2ex.com/balance", headers).then(function (html) {
+  return fetchUrl("https://" + HOST + "/balance", headers).then(function (html) {
     return { balance: formatBalance(html) };
   });
 }
 
 function checkIn(once, headers) {
-  return fetchUrl("https://www.v2ex.com/mission/daily/redeem?once=" + once, headers);
+  return fetchUrl("https://" + HOST + "/mission/daily/redeem?once=" + once, headers);
 }
 
 function doCheckin(attempt, maxRetry, headers) {
@@ -215,7 +250,7 @@ function doCheckin(attempt, maxRetry, headers) {
     if (!info.logged_in) {
       Logger.status("❌", "Cookie 已失效");
       Logger.summary(1, 0, 0, 1, "Cookie 已失效");
-      notifyFn("V2EX", "❌ Cookie 已失效", "请重新访问 V2EX 个人主页");
+      notifyFn("V2EX", "❌ Cookie 已失效", "请在 " + HOST + " 登录并刷新每日任务页面");
       $done({});
       return;
     }
@@ -244,6 +279,10 @@ function doCheckin(attempt, maxRetry, headers) {
     }
 
     return checkIn(info.once, headers).then(function () {
+      return getOnce(headers);
+    }).then(function (after) {
+      if (!after.already) throw new Error("领取后尚未确认奖励，请在每日任务页面核实");
+      info.days = after.days;
       return queryBalance(headers);
     }).then(function (q) {
       Logger.accountHeader(null, HOST);
@@ -259,9 +298,10 @@ function doCheckin(attempt, maxRetry, headers) {
     if (attempt + 1 < maxRetry) {
       return sleep(3000).then(function () { return doCheckin(attempt + 1, maxRetry, headers); });
     }
-    Logger.status("❌", "网络错误");
-    Logger.summary(1, 0, 0, 1, "网络错误");
-    notifyFn("V2EX", "❌ 网络错误", "请检查网络连接");
+    Logger.status("❌", "签到未完成");
+    Logger.message(e && e.message || "请检查网络或登录状态");
+    Logger.summary(1, 0, 0, 1, "签到未完成");
+    notifyFn("V2EX", "❌ 签到未完成", "请检查 " + HOST + " 的网络和登录状态");
     $done({});
   });
 }
@@ -271,29 +311,46 @@ if (isGetHeader) {
   Logger.scriptStart(SCRIPT_NAME, SCRIPT_VERSION, getPlatform(), "Manual");
 
   var allHeaders = $request.headers || {};
-  var cookie = allHeaders.Cookie || allHeaders.cookie || "";
+  var cookie = readHeader(allHeaders, "Cookie");
+  var urlMatch = ($request.url || "").match(/^https:\/\/([^/:?#]+)\//i);
+  var host = urlMatch ? urlMatch[1].toLowerCase() : "";
+  var session = { host: host, cookie: cookie, userAgent: readHeader(allHeaders, "User-Agent") };
 
-  if (!cookie) {
-    Logger.status("⚠️", "Cookie 未获取到");
-    notifyFn("V2EX", "抓包失败", "未获取到 Cookie，请检查 MITM 配置");
+  if (!cookie || !allowedHost(host)) {
+    Logger.status("⚠️", "未获取到受支持域名的 Cookie");
+    $done({});
   } else {
-    var saved = saveCookie(cookie);
-    Logger.status("✅", saved ? "Cookie 已更新" : "Cookie 未变化");
-    if (saved) notifyFn("V2EX", "Cookie 已更新", "后续将用于自动签到");
+    HOST = host;
+    var hasResponse = typeof $response !== "undefined";
+    var validation = hasResponse
+      ? Promise.resolve(parseDaily(($response.status || $response.statusCode) === 200 ? $response.body || "" : ""))
+      : getOnce(buildHeaders(session));
+    validation.then(function (info) {
+      if (!info.already && !info.once) throw new Error("请登录后刷新每日任务页面");
+      var saved = saveSession(session);
+      Logger.status("✅", saved ? "登录会话已更新" : "登录会话未变化");
+      Logger.field("Domain", host);
+      if (saved) notifyFn("V2EX", "登录会话已更新", host + " | 每天 9:10 签到");
+      $done({});
+    }).catch(function () {
+      Logger.status("⚠️", "会话未保存，原有会话保留");
+      notifyFn("V2EX", "抓取失败", "请在 " + host + " 登录后刷新每日任务页面");
+      $done({});
+    });
   }
-  $done({});
 } else {
   Logger.scriptStart(SCRIPT_NAME, SCRIPT_VERSION, getPlatform(), "Cron");
 
-  var storedCookie = getStoredCookie();
-  if (!storedCookie) {
+  var storedSession = getSession();
+  if (!storedSession) {
     Logger.envCheck(false, "Missing");
     Logger.status("⚠️", "无 Cookie");
-    notifyFn("V2EX", "⚠️ 无 Cookie", "请先访问 V2EX 个人主页");
+    notifyFn("V2EX", "⚠️ 无 Cookie", "请登录后访问 /mission/daily");
     $done({});
   } else {
     Logger.envCheck(true, "Found");
-    var headers = buildHeaders(storedCookie);
+    HOST = storedSession.host;
+    var headers = buildHeaders(storedSession);
     doCheckin(0, 3, headers);
   }
 }

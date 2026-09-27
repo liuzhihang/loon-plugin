@@ -12,7 +12,7 @@
 | `plugins/` | Loon 插件入口，脚本地址指向本仓库 |
 | `scripts/` | Scripthub 脚本及各脚本使用说明 |
 | `rules/` | 规则集 |
-| `tests/` | GLaDOS 凭据更新与错误处理的离线回归测试 |
+| `tests/` | GLaDOS 和 V2EX 会话更新、签到结果的离线回归测试 |
 | `licenses/` | 按来源保留的许可证 |
 
 ## 使用
@@ -27,10 +27,12 @@
 
 GLaDOS 的详细步骤见 [使用说明](scripts/glados/README.md)。安装新插件后，在受 Loon 接管的浏览器中登录对应域名并刷新控制台，收到“账号 Cookie 已更新”或“新账号已保存”通知后，再手动执行签到。
 
+V2EX 支持 Edge 的浏览器登录会话。安装后登录并刷新 [Edge 每日任务](https://edge.v2ex.com/mission/daily)，保存会话后在同域名签到，详见 [使用说明](scripts/v2ex/README.md)。
+
 ## 验证
 
 ```sh
-node --test tests/glados.test.cjs
+node --test tests/*.test.cjs
 ```
 
 离线测试使用模拟请求，不访问真实账户。Loon 解析、iCloud 同步和真实接口结果需在设备上确认。当前三个 `.lpx` 入口使用新版语法；各历史脚本说明中的旧平台示例保留供参考。

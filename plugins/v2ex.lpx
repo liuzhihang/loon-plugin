@@ -1,14 +1,14 @@
 #!name=V2EX 每日签到
-#!desc=V2EX 每日签到领取铜币
-#!author=Curtinp118
+#!desc=V2EX 每日签到领取铜币；支持 Edge 登录后刷新每日任务保存会话
+#!author=Curtinp118, liuzhihang
 #!homepage=https://github.com/liuzhihang/loon-plugin
 #!icon=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/V2ex.png
 #!tag=Check-in
 #!loon_version=3.5.1(983)
 
 [Script]
-request if ${url} ~= /^https:\/\/www\.v2ex\.com\/(mission|member).*$/ then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js") with requires_body=false, timeout=10, tag="V2EX抓包", enable=true
+response if ${url} ~= /^https:\/\/(?:(?:www|edge)\.)?v2ex\.com\/mission\/daily(?:\?.*)?$/ && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js") with requires_body=true, timeout=10, tag="V2EX抓包", enable=true
 cron "10 9 * * *" then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js") with timeout=60, tag="V2EX签到", enable=true
 
 [MITM]
-hostname = www.v2ex.com
+hostname = www.v2ex.com, edge.v2ex.com, v2ex.com
