@@ -11,11 +11,20 @@
   {
     "name": "v2ex",
     "file": "scripts/v2ex/v2ex.js",
-    "desc": "V2EX 每日签到领取铜币",
+    "desc": "V2EX 每日签到领取铜币（支持 Edge 登录会话）",
     "author": "Curtinp118",
     "platforms": ["QX", "Loon", "Surge"],
     "cron": "10 9 * * *",
-    "updated": "2026-05-30"
+    "updated": "2026-09-27"
+  },
+  {
+    "name": "sb",
+    "file": "scripts/sb/sb.js",
+    "desc": "烧饼论坛每日签到（同站会话与 CSRF 校验）",
+    "author": "liuzhihang",
+    "platforms": ["Loon"],
+    "cron": "20 9 * * *",
+    "updated": "2026-09-27"
   },
   {
     "name": "dandanvip",

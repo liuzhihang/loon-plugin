@@ -4,15 +4,17 @@
 
 本仓库由 [curtinp118/Scripthub](https://github.com/curtinp118/Scripthub) fork，并合入 [liuzhihang/loon](https://github.com/liuzhihang/loon) 的配置与插件。两侧提交历史均保留，来源和许可证范围见 [UPSTREAM.md](UPSTREAM.md)。
 
+当前统一维护地址为 `liuzhihang/loon-plugin`。安装和更新均使用本仓库的 URL；旧 `liuzhihang/loon` 仅作为迁移来源保留，不再是运行依赖。原作者署名、上游仓库名和许可证归属仍按来源保留。
+
 ## 目录
 
 | 路径 | 内容 |
 | --- | --- |
 | `profile/` | 原 Loon 仓库的公开主配置模板 |
 | `plugins/` | Loon 插件入口，脚本地址指向本仓库 |
-| `scripts/` | Scripthub 脚本及各脚本使用说明 |
+| `scripts/` | 上游脚本、本仓库新增脚本及各自的使用说明 |
 | `rules/` | 规则集 |
-| `tests/` | GLaDOS 和 V2EX 会话更新、签到结果的离线回归测试 |
+| `tests/` | GLaDOS、V2EX 和烧饼论坛的会话与签到离线回归测试 |
 | `licenses/` | 按来源保留的许可证 |
 
 ## 使用
@@ -21,6 +23,7 @@
 
 - [GLaDOS 自动签到](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/glados.lpx)
 - [V2EX 每日签到](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/v2ex.lpx)
+- [烧饼论坛每日签到](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/sb.lpx)
 - [蛋蛋不语插件](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/dandanvip.lpx)
 
 完整主配置模板：[profile/Loon.conf](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/profile/Loon.conf)。已有个人配置时，只替换所需插件 URL，避免覆盖自己的节点和策略。
@@ -29,13 +32,15 @@ GLaDOS 的详细步骤见 [使用说明](scripts/glados/README.md)。安装新�
 
 V2EX 支持 Edge 的浏览器登录会话。安装后登录并刷新 [Edge 每日任务](https://edge.v2ex.com/mission/daily)，保存会话后在同域名签到，详见 [使用说明](scripts/v2ex/README.md)。
 
+烧饼论坛安装后登录并刷新 [每日签到页](https://sb.sb/signin/)，保存会话后每天 9:20 签到，不填写签到留言，详见 [使用说明](scripts/sb/README.md)。
+
 ## 验证
 
 ```sh
 node --test tests/*.test.cjs
 ```
 
-离线测试使用模拟请求，不访问真实账户。Loon 解析、iCloud 同步和真实接口结果需在设备上确认。当前三个 `.lpx` 入口使用新版语法；各历史脚本说明中的旧平台示例保留供参考。
+离线测试使用模拟请求，不访问真实账户。Loon 解析、iCloud 同步和真实接口结果需在设备上确认。当前 `.lpx` 入口使用新版语法；各历史脚本说明中的旧平台示例保留供参考。
 
 ## 维护边界
 

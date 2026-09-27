@@ -1,0 +1,14 @@
+#!name=烧饼论坛每日签到
+#!desc=登录 sb.sb 后刷新每日签到页保存会话，每天 9:20 自动签到
+#!author=liuzhihang
+#!homepage=https://github.com/liuzhihang/loon-plugin
+#!icon=https://sb.sb.sb/assets/apple-touch-icon.png
+#!tag=Check-in
+#!loon_version=3.5.1(983)
+
+[Script]
+response if ${url} ~= /^https:\/\/sb\.sb\/signin\/(?:\?.*)?$/ && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/sb/sb.js") with requires_body=true, timeout=10, tag="烧饼论坛抓包", enable=true
+cron "20 9 * * *" then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/sb/sb.js") with timeout=90, tag="烧饼论坛签到", enable=true
+
+[MITM]
+hostname = sb.sb
