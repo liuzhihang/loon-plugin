@@ -1,5 +1,5 @@
 /*
- * 烧饼论坛每日签到 | v1.0.0 | 2026-09-27
+ * 烧饼论坛每日签到 | v1.0.1 | 2026-09-27
  * Author: liuzhihang
  * Platform: Loon 3.5.1+
  * 登录后刷新 https://sb.sb/signin/ 保存会话；每天 9:20 签到。
@@ -134,7 +134,8 @@
       Referer: DAILY,
       "Cache-Control": "no-cache"
     };
-    var options = { url: url, headers: headers, timeout: 15, "auto-redirect": false, "auto-cookie": false, insecure: false };
+    // Loon $httpClient timeout uses milliseconds.
+    var options = { url: url, headers: headers, timeout: 15000, "auto-redirect": false, "auto-cookie": false, insecure: false };
     if (method === "POST") {
       headers.Origin = ORIGIN;
       headers["Content-Type"] = "application/x-www-form-urlencoded";
@@ -166,7 +167,7 @@
   }
 
   async function run() {
-    console.log("🚀 " + TITLE + " | v1.0.0 | Loon | " + (capture ? "Capture" : "Cron"));
+    console.log("🚀 " + TITLE + " | v1.0.1 | Loon | " + (capture ? "Capture" : "Cron"));
     console.log("Time     : " + new Date().toISOString());
     if (capture) {
       if (!/^https:\/\/sb\.sb\/signin\/(?:\?.*)?$/.test($request.url || "") || String($request.method || "GET").toUpperCase() !== "GET") throw new Error("不是受支持的签到页请求，原有会话保留");

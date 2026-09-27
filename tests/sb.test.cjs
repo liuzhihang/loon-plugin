@@ -113,6 +113,18 @@ test('already signed never submits another POST', async () => {
   assert.equal(r.calls[0].method, 'GET');
 });
 
+test('Loon millisecond timeouts allow a normal network round trip', async () => {
+  let posted = false;
+  const r = await run({ initial: values(), reply: call => {
+    // Loon measures timeout in milliseconds; model a 200 ms response.
+    if (call.timeout < 200) return { error: 'request timed out' };
+    if (call.method === 'POST') posted = true;
+    return { body: posted ? signed : ready };
+  } });
+  assert.match(r.logs, /✅ 签到成功/);
+  assert.equal(r.calls.filter(c => c.method === 'POST').length, 1);
+});
+
 test('board text and script literals cannot be mistaken for a signed account', async () => {
   const fake = ready + '<article>今日已签到</article><script>"<div class=\"signin-hero-action\"><button>今日已签到</button></div>"</script>';
   const r = await run({ initial: values(), reply: () => ({ body: fake }) });
