@@ -102,6 +102,7 @@ test('legacy cookie still uses www and an already-claimed page never redeems', a
 test('an unrelated once token does not trigger a reward request', async () => {
   const r = await run({ values: initial(), reply: () => ({ body: '<a href="/signout?once=999">退出</a>' }) });
   assert.match(r.logs, /未找到 once 码/);
+  assert.equal(r.calls.length, 1);
   assert.equal(r.calls.filter(call => call.url.includes('/redeem')).length, 0);
 });
 
@@ -109,6 +110,67 @@ test('unsuccessful redeem response cannot be reported as success', async () => {
   const r = await run({ values: initial(), reply: options => ({ body: options.url.includes('/redeem') ? '领取失败' : available }) });
   assert.doesNotMatch(r.logs, /✅|Success    : 1/);
   assert.match(r.logs, /领取后尚未确认奖励/);
+  assert.equal(r.calls.filter(call => call.url.includes('/redeem')).length, 1);
+  assert.equal(r.calls.length, 3);
+});
+
+test('HTTP rejection ends the run without retrying or redeeming', async () => {
+  for (const status of [401, 403, 429, 503]) {
+    const r = await run({ values: initial(), reply: () => ({ status, body: available }) });
+    assert.equal(r.calls.length, 1, `HTTP ${status} must not retry`);
+    assert.match(r.logs, new RegExp(`HTTP ${status}`));
+    assert.doesNotMatch(r.logs, /✅|Success    : 1/);
+  }
+});
+
+test('browser challenges cause no retry or redemption and preserve the captured session', async () => {
+  for (const body of [
+    '<title>Just a moment...</title>' + available,
+    '<form id="challenge-form">' + available + '</form>',
+    '<div class="cf-turnstile"></div>' + available,
+  ]) {
+    const values = initial();
+    const r = await run({ values, reply: () => ({ body }) });
+    assert.equal(r.calls.length, 1);
+    assert.match(r.logs, /网站验证/);
+    assert.doesNotMatch(r.logs, /✅|Success    : 1/);
+    const captured = await run({ values, request: capture(), response: { status: 200, body } });
+    assert.deepEqual(Object.fromEntries(captured.store), values);
+    assert.match(captured.logs, /会话未保存/);
+  }
+});
+
+test('failed or uncertain reward requests are never resubmitted', async () => {
+  for (const failure of [{ status: 403 }, { status: 429 }, { error: 'connection closed after sending' }, { body: '<title>Just a moment...</title>' + available }]) {
+    const r = await run({ values: initial(), reply: options => options.url.includes('/redeem') ? failure : { body: available } });
+    assert.equal(r.calls.filter(call => call.url.includes('/redeem')).length, 1);
+    assert.equal(r.calls.length, 2);
+    assert.doesNotMatch(r.logs, /✅|Success    : 1/);
+  }
+});
+
+test('failed verification never restarts the reward flow', async () => {
+  let redeemed = false;
+  const r = await run({ values: initial(), reply: options => {
+    if (options.url.includes('/redeem')) { redeemed = true; return { body: '' }; }
+    return redeemed ? { error: 'verification timed out' } : { body: available };
+  } });
+  assert.equal(r.calls.filter(call => call.url.includes('/redeem')).length, 1);
+  assert.equal(r.calls.length, 3);
+  assert.doesNotMatch(r.logs, /✅|Success    : 1/);
+});
+
+test('redirects cannot introduce or repeat a reward request', async () => {
+  for (const location of ['/mission/daily/redeem?once=12345', 'https://edge.v2ex.com/mission/daily/redeem?once=67890', '/signout?once=12345']) {
+    for (const redirectOnClaim of [false, true]) {
+      const r = await run({ values: initial(), reply: options => !redirectOnClaim || options.url.includes('/redeem')
+        ? { status: 302, headers: { location } } : { body: available } });
+      assert.equal(r.calls.length, redirectOnClaim ? 2 : 1);
+      assert.equal(r.calls.filter(call => call.url.includes('/redeem')).length, redirectOnClaim ? 1 : 0);
+      assert.match(r.logs, /重定向异常/);
+      assert.doesNotMatch(r.logs, /✅|Success    : 1/);
+    }
+  }
 });
 
 test('cross-origin redirects never receive stored credentials', async () => {

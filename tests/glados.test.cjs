@@ -20,7 +20,7 @@ async function run({ initial = {}, request, response, reply, writeOK = true, qx 
   const send = (options, callback) => {
     calls.push(options);
     const result = reply ? reply(options) : { body: status() };
-    queueMicrotask(() => callback(result.error || null, { status: result.status || 200, headers: {} }, JSON.stringify(result.body || {})));
+    queueMicrotask(() => callback(result.error || null, { status: result.status || 200, headers: result.headers || {} }, JSON.stringify(result.body || {})));
   };
   const write = (value, key) => { if (!writeOK) return false; store.set(key, value); return true; };
   const sandbox = {
@@ -58,6 +58,21 @@ test('same-cookie capture is idempotent without extra identity requests', async 
   const result = await run({ initial: saved(['same']), request: capture('same'), response: status() });
   assert.deepEqual(JSON.parse(result.store.get(key)), ['same']);
   assert.equal(result.calls.length, 0);
+});
+
+test('capture reads Cookie and User-Agent without depending on header case', async () => {
+  for (const headers of [
+    { cOoKiE: 'fixture-cookie', 'User-agent': ua },
+    { COOKIE: 'fixture-cookie', 'USER-AGENT': ua },
+    { cookie: 'fixture-cookie', 'user-agent': ua },
+  ]) {
+    const request = { url: `https://${domain}/api/user/status`, headers };
+    const result = await run({ request, response: status() });
+    assert.deepEqual(JSON.parse(result.store.get(key) || 'null'), ['fixture-cookie']);
+    assert.equal(JSON.parse(result.store.get(metaKey))[0].userAgent, ua);
+    assert.equal(result.calls.length, 0);
+    assert.doesNotMatch(result.logs, /fixture-cookie/);
+  }
 });
 
 test('cached account identity permits replacement of an expired session', async () => {
@@ -100,7 +115,32 @@ test('real duplicate is recognized with captured UA and isolated Loon cookie han
       : options.url.endsWith('/points') ? { points: 289 } : status() }) });
   assert.match(result.logs, /成功0 重复1 失败0/);
   assert.doesNotMatch(result.logs, /Cookie : Valid|Token/);
-  assert.ok(result.calls.every(call => call.headers['User-Agent'] === ua && call['auto-cookie'] === false && call.insecure === false));
+  assert.ok(result.calls.every(call => call.headers['User-Agent'] === ua && call['auto-cookie'] === false && call['auto-redirect'] === false && call.insecure === false));
+});
+
+test('redirected check-ins never follow the target, report success or exchange points', async () => {
+  for (const statusCode of [301, 302, 303, 307, 308]) {
+    for (const location of ['/api/user/checkin', 'https://unrelated.example.test/checkin']) {
+      const result = await run({ initial: saved(['fixture-cookie']), reply: options => options.url.endsWith('/checkin')
+        ? { status: statusCode, headers: { Location: location }, body: { code: 0, points: 4 } }
+        : { body: options.url.endsWith('/points') ? { points: 600 } : status() } });
+      assert.equal(result.calls.filter(call => call.url.endsWith('/checkin')).length, 1);
+      assert.equal(result.calls.filter(call => call.url.endsWith('/exchange')).length, 0);
+      assert.ok(result.calls.every(call => new URL(call.url).origin === `https://${domain}` && call['auto-redirect'] === false));
+      assert.match(result.logs, /重定向/);
+      assert.match(result.logs, /成功0 重复0 失败1/);
+    }
+  }
+});
+
+test('unconfirmed check-ins skip point exchange', async () => {
+  for (const failure of [{ error: 'connection closed' }, { body: { code: -2, message: 'not confirmed' } }]) {
+    const result = await run({ initial: saved(['fixture-cookie']), reply: options => options.url.endsWith('/checkin')
+      ? failure : { body: options.url.endsWith('/points') ? { points: 600 } : status() } });
+    assert.equal(result.calls.filter(call => call.url.endsWith('/checkin')).length, 1);
+    assert.equal(result.calls.filter(call => call.url.endsWith('/exchange')).length, 0);
+    assert.match(result.logs, /成功0 重复0 失败1/);
+  }
 });
 
 test('successful check-in preserves existing points exchange behavior', async () => {

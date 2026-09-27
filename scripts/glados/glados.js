@@ -1,6 +1,6 @@
 /****************************** 
 脚本功能：GLaDOS / Railgun 自动签到 + 积分兑换（多账号版）
-Version  : v1.4.0
+Version  : v1.4.1
 更新时间：2026-09-27
 作者：Curtinp118
 Platform : Quantumult X / Loon / Surge
@@ -108,7 +108,7 @@ var Logger = {
 
 // ========== 工具函数 ==========
 var SCRIPT_NAME = "GLaDOS";
-var SCRIPT_VERSION = "v1.4.0";
+var SCRIPT_VERSION = "v1.4.1";
 var COOKIES_KEY_PREFIX = "GLaDOS_Cookies";
 var ACCOUNT_META_PREFIX = "GLaDOS_AccountMeta";
 var DOMAINS_LIST_KEY = "GLaDOS_Domains";
@@ -118,6 +118,11 @@ var isGetHeader = typeof $request !== "undefined";
 
 function safeJsonParse(str) {
   try { return JSON.parse(str); } catch (_) { return null; }
+}
+
+function readHeader(headers, name) {
+  var key = Object.keys(headers || {}).filter(function (key) { return key.toLowerCase() === name.toLowerCase(); })[0];
+  return key ? headers[key] : "";
 }
 
 function getPlatform() {
@@ -227,12 +232,16 @@ function request(url, method, cookie, domain, body, userAgent) {
   var opts = { url: url, method: method, headers: headers };
   if (isLoon) {
     opts["auto-cookie"] = false;
+    opts["auto-redirect"] = false;
     opts.insecure = false;
   }
   if (body !== undefined) opts.body = typeof body === "string" ? body : JSON.stringify(body);
 
   return $http.fetch(opts).then(
     function (resp) {
+      if (resp.statusCode >= 300 && resp.statusCode < 400) {
+        return { statusCode: resp.statusCode, data: null, raw: "", error: "接口返回 HTTP " + resp.statusCode + " 重定向，已停止跟随；请在原域名核实登录状态" };
+      }
       return { statusCode: resp.statusCode, data: safeJsonParse(resp.body || ""), raw: resp.body || "" };
     },
     function (reason) {
@@ -309,6 +318,7 @@ function checkinForAccount(cookie, domain, accountIndex) {
   }).then(function (pr) {
     pointsResult = pr;
     if (checkinResult.needsLogin) return "跳过(需要更新登录凭据)";
+    if (checkinResult.code !== 0 && checkinResult.code !== 1) return "跳过(签到未完成)";
     exchangeResult = "跳过(积分不足)";
     if (pointsResult.pointsNum >= 500) {
       return exchange(cookie, domain, EXCHANGE_PLAN);
@@ -353,8 +363,8 @@ if (isGetHeader) {
   Logger.scriptStart(SCRIPT_NAME, SCRIPT_VERSION, getPlatform(), "Manual");
 
   var allHeaders = $request.headers || {};
-  var cookie = allHeaders.Cookie || allHeaders.cookie || "";
-  var userAgent = allHeaders["User-Agent"] || allHeaders["user-agent"] || "";
+  var cookie = readHeader(allHeaders, "Cookie");
+  var userAgent = readHeader(allHeaders, "User-Agent");
   var host = getHostFromRequest();
   var capturedResponse = typeof $response !== "undefined" ? safeJsonParse($response.body || "") : null;
   var verifiedEmail = capturedResponse && (capturedResponse.code === 0 || capturedResponse.code === undefined) && capturedResponse.data && capturedResponse.data.email;

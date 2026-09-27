@@ -1,6 +1,6 @@
 /****************************** 
 脚本功能：V2EX 每日签到
-Version  : v1.3.0
+Version  : v1.3.1
 更新时间：2026-09-27
 作者：Curtinp118
 Platform : Quantumult X / Loon / Surge
@@ -100,7 +100,7 @@ var Logger = {
 
 // ========== 工具函数 ==========
 var SCRIPT_NAME = "V2EX";
-var SCRIPT_VERSION = "v1.3.0";
+var SCRIPT_VERSION = "v1.3.1";
 var COOKIE_KEY = "V2EX_Cookie";
 var SESSION_KEY = "V2EX_Session";
 var HOST = "www.v2ex.com";
@@ -126,10 +126,6 @@ function getPlatform() {
   return "Unknown";
 }
 
-function sleep(ms) {
-  return new Promise(function (resolve) { setTimeout(resolve, ms); });
-}
-
 // ========== 存储函数 ==========
 function getStoredCookie() {
   try {
@@ -145,6 +141,14 @@ function allowedHost(host) {
 function readHeader(headers, name) {
   var key = Object.keys(headers || {}).filter(function (key) { return key.toLowerCase() === name.toLowerCase(); })[0];
   return key ? headers[key] : "";
+}
+
+function requireNoChallenge(html) {
+  if (/<title[^>]*>\s*(?:Just a moment|Attention Required|安全验证|人机验证)/i.test(html) ||
+      /<(?:form|div)\b[^>]*(?:id\s*=\s*["']challenge-form["']|class\s*=\s*["'][^"']*(?:cf-turnstile|g-recaptcha|h-captcha))/i.test(html)) {
+    throw new Error("检测到网站验证，已停止自动签到，请在浏览器核实");
+  }
+  return html;
 }
 
 function getSession() {
@@ -187,11 +191,14 @@ function fetchUrl(url, headers, redirects) {
       var location = readHeader(resp.headers, "Location");
       var base = "https://" + HOST;
       if (/^\/(?!\/)/.test(location)) location = base + location;
-      if (location.indexOf(base + "/") !== 0 || (redirects || 0) >= 3) throw new Error("重定向异常，请在已登录域名重新抓取会话");
+      // 重定向仅能进入查询页面，不能借重定向再次领取或执行其他操作。
+      if (location.indexOf(base + "/") !== 0 || !/^\/(?:mission\/daily|balance)\/?(?:[?#]|$)/.test(location.slice(base.length)) || (redirects || 0) >= 3) {
+        throw new Error("重定向异常，请在已登录域名重新抓取会话");
+      }
       return fetchUrl(location, headers, (redirects || 0) + 1);
     }
     if (resp.statusCode !== 200) throw new Error("HTTP " + resp.statusCode);
-    return resp.body || "";
+    return requireNoChallenge(resp.body || "");
   });
 }
 
@@ -216,6 +223,7 @@ function formatBalance(html) {
 }
 
 function parseDaily(html) {
+    requireNoChallenge(html);
     if (!html) return { once: "", logged_in: false, already: false, days: "?" };
     if (html.includes("你要查看的页面需要先登录") || html.includes("需要先登录")) {
       return { once: "", logged_in: false, already: false, days: "?" };
@@ -243,8 +251,8 @@ function checkIn(once, headers) {
   return fetchUrl("https://" + HOST + "/mission/daily/redeem?once=" + once, headers);
 }
 
-function doCheckin(attempt, maxRetry, headers) {
-  Logger.action("签到尝试 " + (attempt + 1) + "/" + maxRetry);
+function doCheckin(headers) {
+  Logger.action("单次签到，失败后不自动重试");
 
   return getOnce(headers).then(function (info) {
     if (!info.logged_in) {
@@ -269,9 +277,6 @@ function doCheckin(attempt, maxRetry, headers) {
     }
 
     if (!info.once) {
-      if (attempt + 1 < maxRetry) {
-        return sleep(3000).then(function () { return doCheckin(attempt + 1, maxRetry, headers); });
-      }
       Logger.summary(1, 0, 0, 1, "未找到 once 码");
       notifyFn("V2EX", "❌ 签到失败", "未找到 once 码");
       $done({});
@@ -295,13 +300,11 @@ function doCheckin(attempt, maxRetry, headers) {
       $done({});
     });
   }).catch(function (e) {
-    if (attempt + 1 < maxRetry) {
-      return sleep(3000).then(function () { return doCheckin(attempt + 1, maxRetry, headers); });
-    }
+    var message = e && e.message || "请检查网络或登录状态";
     Logger.status("❌", "签到未完成");
-    Logger.message(e && e.message || "请检查网络或登录状态");
+    Logger.message(message);
     Logger.summary(1, 0, 0, 1, "签到未完成");
-    notifyFn("V2EX", "❌ 签到未完成", "请检查 " + HOST + " 的网络和登录状态");
+    notifyFn("V2EX", "❌ 签到未完成", message + "；请在 " + HOST + " 的每日任务页面核实");
     $done({});
   });
 }
@@ -323,7 +326,7 @@ if (isGetHeader) {
     HOST = host;
     var hasResponse = typeof $response !== "undefined";
     var validation = hasResponse
-      ? Promise.resolve(parseDaily(($response.status || $response.statusCode) === 200 ? $response.body || "" : ""))
+      ? Promise.resolve().then(function () { return parseDaily(($response.status || $response.statusCode) === 200 ? $response.body || "" : ""); })
       : getOnce(buildHeaders(session));
     validation.then(function (info) {
       if (!info.already && !info.once) throw new Error("请登录后刷新每日任务页面");
@@ -351,6 +354,6 @@ if (isGetHeader) {
     Logger.envCheck(true, "Found");
     HOST = storedSession.host;
     var headers = buildHeaders(storedSession);
-    doCheckin(0, 3, headers);
+    doCheckin(headers);
   }
 }
