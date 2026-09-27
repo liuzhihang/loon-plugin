@@ -9,7 +9,7 @@ Platform : Quantumult X / Loon / Surge
 MITM 重写响应体，解锁 Nicegram 会员功能。
 
 [rewrite_local]
-https://nicegram.cloud/api/v6/user/info url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nicegram/nicegram.js
+https://nicegram.cloud/api/v6/user/info url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nicegram/nicegram.js
 
 [MITM]
 hostname = nicegram.cloud

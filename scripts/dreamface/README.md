@@ -23,7 +23,7 @@
 
 ```ini
 [rewrite_local]
-https://www.dreamfaceapp.com/df-server/user/save_user_login url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dreamface/dreamface.js
+https://www.dreamfaceapp.com/df-server/user/save_user_login url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dreamface/dreamface.js
 
 [MITM]
 hostname = www.dreamfaceapp.com
@@ -33,7 +33,7 @@ hostname = www.dreamfaceapp.com
 
 ```ini
 [Script]
-http-response https://www.dreamfaceapp.com/df-server/user/save_user_login script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dreamface/dreamface.js, requires-body=true
+http-response https://www.dreamfaceapp.com/df-server/user/save_user_login script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dreamface/dreamface.js, requires-body=true
 
 [MITM]
 hostname = www.dreamfaceapp.com
@@ -43,7 +43,7 @@ hostname = www.dreamfaceapp.com
 
 ```ini
 [Script]
-DreamFace = type=http-response, pattern=https://www.dreamfaceapp.com/df-server/user/save_user_login, requires-body=1, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dreamface/dreamface.js
+DreamFace = type=http-response, pattern=https://www.dreamfaceapp.com/df-server/user/save_user_login, requires-body=1, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dreamface/dreamface.js
 
 [MITM]
 hostname = %APPEND% www.dreamfaceapp.com

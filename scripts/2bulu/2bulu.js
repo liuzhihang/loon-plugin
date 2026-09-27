@@ -10,8 +10,8 @@ Platform : Quantumult X / Loon / Surge
 打开两步路会员页即可生效。
 
 [rewrite_local]
-^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js
-^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js
+^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js
+^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js
 
 [MITM]
 hostname = h5.2bulu.com, helper.2bulu.com

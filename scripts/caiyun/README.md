@@ -23,7 +23,7 @@
 
 ```ini
 [rewrite_local]
-^https://biz\.cyapi\.cn/ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/caiyun/caiyun.js
+^https://biz\.cyapi\.cn/ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/caiyun/caiyun.js
 
 [MITM]
 hostname = biz.cyapi.cn
@@ -33,7 +33,7 @@ hostname = biz.cyapi.cn
 
 ```ini
 [Script]
-http-response ^https://biz\.cyapi\.cn/ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/caiyun/caiyun.js, requires-body=true
+http-response ^https://biz\.cyapi\.cn/ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/caiyun/caiyun.js, requires-body=true
 
 [MITM]
 hostname = biz.cyapi.cn
@@ -43,7 +43,7 @@ hostname = biz.cyapi.cn
 
 ```ini
 [Script]
-彩云天气 = type=http-response, pattern=^https://biz\.cyapi\.cn/, requires-body=1, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/caiyun/caiyun.js
+彩云天气 = type=http-response, pattern=^https://biz\.cyapi\.cn/, requires-body=1, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/caiyun/caiyun.js
 
 [MITM]
 hostname = %APPEND% biz.cyapi.cn

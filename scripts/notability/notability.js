@@ -9,7 +9,7 @@ Platform : Quantumult X / Loon / Surge
 MITM 重写响应体，解锁 Notability 会员功能。
 
 [rewrite_local]
-^https?://notability\.com/(global|subscriptions) url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/notability/notability.js
+^https?://notability\.com/(global|subscriptions) url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/notability/notability.js
 
 [MITM]
 hostname = notability.com

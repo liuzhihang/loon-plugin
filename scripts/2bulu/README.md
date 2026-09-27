@@ -24,8 +24,8 @@
 
 ```ini
 [rewrite_local]
-^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js
-^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js
+^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js
+^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js
 
 [MITM]
 hostname = h5.2bulu.com, helper.2bulu.com
@@ -35,8 +35,8 @@ hostname = h5.2bulu.com, helper.2bulu.com
 
 ```ini
 [Script]
-http-response ^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js, requires-body=true, timeout=10, tag=两步路VIP解锁, enable=true
-http-response ^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js, requires-body=true, timeout=10, tag=两步路会员文案, enable=true
+http-response ^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js, requires-body=true, timeout=10, tag=两步路VIP解锁, enable=true
+http-response ^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js, requires-body=true, timeout=10, tag=两步路会员文案, enable=true
 
 [MITM]
 hostname = h5.2bulu.com, helper.2bulu.com
@@ -46,8 +46,8 @@ hostname = h5.2bulu.com, helper.2bulu.com
 
 ```ini
 [Script]
-两步路VIP解锁 = type=http-response,pattern=^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+,requires-body=1,max-size=1048576,binary-body-mode=0,timeout=888,script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js
-两步路会员文案 = type=http-response,pattern=^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$,requires-body=1,max-size=1048576,binary-body-mode=0,timeout=888,script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/2bulu/2bulu.js
+两步路VIP解锁 = type=http-response,pattern=^https:\/\/h5\.2bulu\.com\/api\/v9\/vip\/myVipInfo\?userId=[^&]+,requires-body=1,max-size=1048576,binary-body-mode=0,timeout=888,script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js
+两步路会员文案 = type=http-response,pattern=^https:\/\/helper\.2bulu\.com\/vip\/message(?:\?.*)?$,requires-body=1,max-size=1048576,binary-body-mode=0,timeout=888,script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/2bulu/2bulu.js
 
 [MITM]
 hostname = %APPEND% h5.2bulu.com, helper.2bulu.com

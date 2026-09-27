@@ -22,10 +22,10 @@
 
 ```ini
 [rewrite_local]
-^https?://wx\.10086\.cn/qwhdhub/ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cmcc/cmcc.js
+^https?://wx\.10086\.cn/qwhdhub/ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cmcc/cmcc.js
 
 [task_local]
-35 8 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cmcc/cmcc.js, tag=中国移动签到, enabled=true
+35 8 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cmcc/cmcc.js, tag=中国移动签到, enabled=true
 
 [MITM]
 hostname = %APPEND% wx.10086.cn
@@ -35,8 +35,8 @@ hostname = %APPEND% wx.10086.cn
 
 ```ini
 [Script]
-http-request ^https?://wx\.10086\.cn/qwhdhub/ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cmcc/cmcc.js, requires-body=false, tag=中国移动 抓包
-cron "35 8 * * *" script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cmcc/cmcc.js, tag=中国移动签到, enabled=true
+http-request ^https?://wx\.10086\.cn/qwhdhub/ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cmcc/cmcc.js, requires-body=false, tag=中国移动 抓包
+cron "35 8 * * *" script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cmcc/cmcc.js, tag=中国移动签到, enabled=true
 
 [MITM]
 hostname = wx.10086.cn
@@ -46,8 +46,8 @@ hostname = wx.10086.cn
 
 ```ini
 [Script]
-中国移动 抓包 = type=http-request, pattern=^https?://wx\.10086\.cn/qwhdhub/, requires-body=0, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cmcc/cmcc.js
-中国移动签到 = type=cron, cronexp="35 8 * * *", script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cmcc/cmcc.js, timeout=60
+中国移动 抓包 = type=http-request, pattern=^https?://wx\.10086\.cn/qwhdhub/, requires-body=0, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cmcc/cmcc.js
+中国移动签到 = type=cron, cronexp="35 8 * * *", script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cmcc/cmcc.js, timeout=60
 
 [MITM]
 hostname = %APPEND% wx.10086.cn

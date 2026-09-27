@@ -9,7 +9,7 @@ Platform : Quantumult X / Loon / Surge
 MITM 重写响应体，解锁布丁锁屏会员功能。
 
 [rewrite_local]
-^https://screen-lock\.sm-check\.com/ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/buding/buding.js
+^https://screen-lock\.sm-check\.com/ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/buding/buding.js
 
 [MITM]
 hostname = screen-lock.sm-check.com

@@ -23,7 +23,7 @@
 
 ```ini
 [rewrite_local]
-https://nicegram.cloud/api/v6/user/info url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nicegram/nicegram.js
+https://nicegram.cloud/api/v6/user/info url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nicegram/nicegram.js
 
 [MITM]
 hostname = nicegram.cloud
@@ -33,7 +33,7 @@ hostname = nicegram.cloud
 
 ```ini
 [Script]
-http-response https://nicegram.cloud/api/v6/user/info script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nicegram/nicegram.js, requires-body=true
+http-response https://nicegram.cloud/api/v6/user/info script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nicegram/nicegram.js, requires-body=true
 
 [MITM]
 hostname = nicegram.cloud
@@ -43,7 +43,7 @@ hostname = nicegram.cloud
 
 ```ini
 [Script]
-Nicegram = type=http-response, pattern=https://nicegram.cloud/api/v6/user/info, requires-body=1, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nicegram/nicegram.js
+Nicegram = type=http-response, pattern=https://nicegram.cloud/api/v6/user/info, requires-body=1, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nicegram/nicegram.js
 
 [MITM]
 hostname = %APPEND% nicegram.cloud

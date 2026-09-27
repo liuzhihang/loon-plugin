@@ -9,10 +9,10 @@ Platform : Quantumult X / Loon / Surge
 访问 NodeSeek 个人页面保存请求头，定时任务自动签到。
 
 [rewrite_local]
-^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js
+^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js
 
 [task_local]
-30 8 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js, tag=NS签到, enabled=true
+30 8 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js, tag=NS签到, enabled=true
 
 [MITM]
 hostname = www.nodeseek.com

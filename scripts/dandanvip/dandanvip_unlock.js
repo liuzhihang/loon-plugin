@@ -9,7 +9,7 @@ Platform : Quantumult X / Loon / Surge
 添加到重写 解锁蛋蛋不语VIP会员功能。
 
 [rewrite_local]
-^http:\/\/38\.76\.202\.248:8000\/.*profiles.* url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dandanvip/dandanvip_unlock.js
+^http:\/\/38\.76\.202\.248:8000\/.*profiles.* url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dandanvip/dandanvip_unlock.js
 
 [MITM]
 hostname = 38.76.202.248

@@ -23,10 +23,10 @@
 
 ```ini
 [rewrite_local]
-^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)?(\?.*)?$ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js
+^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)?(\?.*)?$ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js
 
 [task_local]
-10 9 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js, tag=成都地铁签到, enabled=true
+10 9 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js, tag=成都地铁签到, enabled=true
 
 [MITM]
 hostname = app.cdmetro.chengdurail.cn
@@ -36,8 +36,8 @@ hostname = app.cdmetro.chengdurail.cn
 
 ```ini
 [Script]
-http-request ^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)? script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js, requires-body=false, tag=成都地铁 抓包
-cron "10 9 * * *" script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js, tag=成都地铁签到, enabled=true
+http-request ^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)? script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js, requires-body=false, tag=成都地铁 抓包
+cron "10 9 * * *" script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js, tag=成都地铁签到, enabled=true
 
 [MITM]
 hostname = app.cdmetro.chengdurail.cn
@@ -47,8 +47,8 @@ hostname = app.cdmetro.chengdurail.cn
 
 ```ini
 [Script]
-成都地铁 抓包 = type=http-request, pattern=^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)?, requires-body=0, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js
-成都地铁签到 = type=cron, cronexp="10 9 * * *", script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js, timeout=60
+成都地铁 抓包 = type=http-request, pattern=^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)?, requires-body=0, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js
+成都地铁签到 = type=cron, cronexp="10 9 * * *", script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js, timeout=60
 
 [MITM]
 hostname = %APPEND% app.cdmetro.chengdurail.cn

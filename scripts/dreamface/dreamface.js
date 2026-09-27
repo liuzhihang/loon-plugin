@@ -9,7 +9,7 @@ Platform : Quantumult X / Loon / Surge
 MITM 重写响应体，解锁 DreamFace 会员功能。
 
 [rewrite_local]
-https://www.dreamfaceapp.com/df-server/user/save_user_login url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dreamface/dreamface.js
+https://www.dreamfaceapp.com/df-server/user/save_user_login url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dreamface/dreamface.js
 
 [MITM]
 hostname = www.dreamfaceapp.com

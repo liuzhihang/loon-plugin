@@ -1,0 +1,26 @@
+#!name=蛋蛋不语VIP解锁
+#!desc=解锁蛋蛋不语VIP会员功能
+#!author=Curtinp118
+#!homepage=https://github.com/liuzhihang/loon-plugin
+#!loon_version=3.5.1(983)
+
+[Rule]
+# 蛋蛋不语
+DOMAIN-SUFFIX,one.one.one.one
+DOMAIN-SUFFIX,api.wwzy.tv
+DOMAIN-SUFFIX,bfzyapi.com
+DOMAIN-SUFFIX,img.picbf.com
+DOMAIN-SUFFIX,v10.baofeng10.com
+DOMAIN-SUFFIX,icanhazip.com
+DOMAIN-SUFFIX,captive.apple.com
+DOMAIN-SUFFIX,ajax.googleapis.com
+DOMAIN-SUFFIX,s1.fengbao9.com
+DOMAIN-SUFFIX,develop202.github.io
+DOMAIN-SUFFIX,s2.bfllvip.com
+IP-CIDR,38.76.202.248/32
+
+[Script]
+response if ${url} ~= /^http:\/\/38\.76\.202\.248:8000\/.*profiles.*/ then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dandanvip/dandanvip_unlock.js") with requires_body=true, timeout=10, tag="蛋蛋不语VIP解锁", enable=true
+
+[MITM]
+hostname = 38.76.202.248

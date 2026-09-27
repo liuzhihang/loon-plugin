@@ -1,0 +1,14 @@
+#!name=GLaDOS 自动签到
+#!desc=GLaDOS / Railgun 自动签到 + 积分兑换；刷新控制台更新同账号 Cookie
+#!author=Curtinp118, liuzhihang
+#!homepage=https://github.com/liuzhihang/loon-plugin
+#!icon=https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/GlaDos.png
+#!tag=Check-in
+#!loon_version=3.5.1(983)
+
+[Script]
+response if ${url} ~= /^https:\/\/(glados\.(network|vip|one|space)|railgun\.info)\/api\/user\/status(?:\?.*)?$/ && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/glados/glados.js") with requires_body=true, timeout=30, tag="GLaDOS抓包", enable=true
+cron "10 7 * * *" then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/glados/glados.js") with timeout=120, tag="GLaDOS签到", enable=true
+
+[MITM]
+hostname = glados.network, railgun.info, glados.vip, glados.one, glados.space

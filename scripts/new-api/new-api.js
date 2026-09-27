@@ -10,10 +10,10 @@ Platform : Quantumult X / Loon / Surge
 支持任意 new-api 站点，同一站点支持多账号。
 
 [rewrite_local]
-^https://[^/]+/api/user/self$ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js
+^https://[^/]+/api/user/self$ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js
 
 [task_local]
-30 7 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js, tag=通用签到, enabled=true
+30 7 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js, tag=通用签到, enabled=true
 
 [MITM]
 hostname = %APPEND% *

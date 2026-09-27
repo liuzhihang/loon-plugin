@@ -9,10 +9,10 @@ Platform : Quantumult X / Loon / Surge
 打开成都地铁 App 签到页面保存请求头，定时任务自动签到。
 
 [rewrite_local]
-^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)?(\?.*)?$ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js
+^https://app\.cdmetro\.chengdurail\.cn/platform/users/user/sign-in-integral(-day)?(\?.*)?$ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js
 
 [task_local]
-10 9 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/cd-rail/cd-rail.js, tag=成都地铁签到, enabled=true
+10 9 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/cd-rail/cd-rail.js, tag=成都地铁签到, enabled=true
 
 [MITM]
 hostname = app.cdmetro.chengdurail.cn

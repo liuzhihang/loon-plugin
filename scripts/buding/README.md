@@ -23,7 +23,7 @@
 
 ```ini
 [rewrite_local]
-^https://screen-lock\.sm-check\.com/ url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/buding/buding.js
+^https://screen-lock\.sm-check\.com/ url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/buding/buding.js
 
 [MITM]
 hostname = screen-lock.sm-check.com
@@ -33,7 +33,7 @@ hostname = screen-lock.sm-check.com
 
 ```ini
 [Script]
-http-response ^https://screen-lock\.sm-check\.com/ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/buding/buding.js, requires-body=true
+http-response ^https://screen-lock\.sm-check\.com/ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/buding/buding.js, requires-body=true
 
 [MITM]
 hostname = screen-lock.sm-check.com
@@ -43,7 +43,7 @@ hostname = screen-lock.sm-check.com
 
 ```ini
 [Script]
-布丁锁屏 = type=http-response, pattern=^https://screen-lock\.sm-check\.com/, requires-body=1, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/buding/buding.js
+布丁锁屏 = type=http-response, pattern=^https://screen-lock\.sm-check\.com/, requires-body=1, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/buding/buding.js
 
 [MITM]
 hostname = %APPEND% screen-lock.sm-check.com

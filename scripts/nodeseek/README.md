@@ -22,10 +22,10 @@
 
 ```ini
 [rewrite_local]
-^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js
+^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js
 
 [task_local]
-30 8 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js, tag=NS签到, enabled=true
+30 8 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js, tag=NS签到, enabled=true
 
 [MITM]
 hostname = www.nodeseek.com
@@ -35,8 +35,8 @@ hostname = www.nodeseek.com
 
 ```ini
 [Script]
-http-request ^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js, requires-body=false, tag=NS 抓包
-cron "30 8 * * *" script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js, tag=NS签到, enabled=true
+http-request ^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js, requires-body=false, tag=NS 抓包
+cron "30 8 * * *" script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js, tag=NS签到, enabled=true
 
 [MITM]
 hostname = www.nodeseek.com
@@ -46,8 +46,8 @@ hostname = www.nodeseek.com
 
 ```ini
 [Script]
-NS 抓包 = type=http-request, pattern=^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$, requires-body=0, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js
-NS签到 = type=cron, cronexp="30 8 * * *", script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/nodeseek/nodeseek.js, timeout=60
+NS 抓包 = type=http-request, pattern=^https://www\.nodeseek\.com/api/account/getInfo/\d+\?readme=1$, requires-body=0, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js
+NS签到 = type=cron, cronexp="30 8 * * *", script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js, timeout=60
 
 [MITM]
 hostname = %APPEND% www.nodeseek.com

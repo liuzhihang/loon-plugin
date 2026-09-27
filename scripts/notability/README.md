@@ -23,7 +23,7 @@
 
 ```ini
 [rewrite_local]
-^https?://notability\.com/(global|subscriptions) url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/notability/notability.js
+^https?://notability\.com/(global|subscriptions) url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/notability/notability.js
 
 [MITM]
 hostname = notability.com
@@ -33,7 +33,7 @@ hostname = notability.com
 
 ```ini
 [Script]
-http-response ^https?://notability\.com/(global|subscriptions) script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/notability/notability.js, requires-body=true
+http-response ^https?://notability\.com/(global|subscriptions) script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/notability/notability.js, requires-body=true
 
 [MITM]
 hostname = notability.com
@@ -43,7 +43,7 @@ hostname = notability.com
 
 ```ini
 [Script]
-Notability = type=http-response, pattern=^https?://notability\.com/(global|subscriptions), requires-body=1, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/notability/notability.js
+Notability = type=http-response, pattern=^https?://notability\.com/(global|subscriptions), requires-body=1, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/notability/notability.js
 
 [MITM]
 hostname = %APPEND% notability.com

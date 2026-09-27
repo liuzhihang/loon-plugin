@@ -24,10 +24,10 @@
 
 ```ini
 [rewrite_local]
-^https://[^/]+/api/user/self$ url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js
+^https://[^/]+/api/user/self$ url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js
 
 [task_local]
-30 7 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js, tag=通用签到, enabled=true
+30 7 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js, tag=通用签到, enabled=true
 
 [MITM]
 hostname = %APPEND% *
@@ -37,8 +37,8 @@ hostname = %APPEND% *
 
 ```ini
 [Script]
-http-request ^https://[^/]+/api/user/self$ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js, requires-body=false, tag=通用签到 抓包
-cron "30 7 * * *" script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js, tag=通用签到, enabled=true
+http-request ^https://[^/]+/api/user/self$ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js, requires-body=false, tag=通用签到 抓包
+cron "30 7 * * *" script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js, tag=通用签到, enabled=true
 
 [MITM]
 hostname = *
@@ -48,8 +48,8 @@ hostname = *
 
 ```ini
 [Script]
-通用签到 抓包 = type=http-request, pattern=^https://[^/]+/api/user/self$, requires-body=0, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js
-通用签到 = type=cron, cronexp="30 7 * * *", script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/new-api/new-api.js, timeout=60
+通用签到 抓包 = type=http-request, pattern=^https://[^/]+/api/user/self$, requires-body=0, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js
+通用签到 = type=cron, cronexp="30 7 * * *", script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/new-api/new-api.js, timeout=60
 
 [MITM]
 hostname = %APPEND% *

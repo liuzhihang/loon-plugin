@@ -22,7 +22,7 @@
 
 ```ini
 [rewrite_local]
-^http:\/\/38\.76\.202\.248:8000\/.*profiles.* url script-response-body https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dandanvip/dandanvip_unlock.js
+^http:\/\/38\.76\.202\.248:8000\/.*profiles.* url script-response-body https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dandanvip/dandanvip_unlock.js
 
 [MITM]
 hostname = 38.76.202.248
@@ -32,7 +32,7 @@ hostname = 38.76.202.248
 
 ```ini
 [Script]
-http-response ^http:\/\/38\.76\.202\.248:8000\/.*profiles.* script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dandanvip/dandanvip_unlock.js, requires-body=true
+http-response ^http:\/\/38\.76\.202\.248:8000\/.*profiles.* script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dandanvip/dandanvip_unlock.js, requires-body=true
 
 [MITM]
 hostname = 38.76.202.248
@@ -42,7 +42,7 @@ hostname = 38.76.202.248
 
 ```ini
 [Script]
-蛋蛋不语VIP解锁 = type=http-response, pattern=^http:\/\/38\.76\.202\.248:8000\/.*profiles.*, requires-body=1, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/dandanvip/dandanvip_unlock.js
+蛋蛋不语VIP解锁 = type=http-response, pattern=^http:\/\/38\.76\.202\.248:8000\/.*profiles.*, requires-body=1, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/dandanvip/dandanvip_unlock.js
 
 [MITM]
 hostname = %APPEND% 38.76.202.248

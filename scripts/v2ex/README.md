@@ -24,10 +24,10 @@
 
 ```ini
 [rewrite_local]
-^https://www\.v2ex\.com/(mission|member).* url script-request-header https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/v2ex/v2ex.js
+^https://www\.v2ex\.com/(mission|member).* url script-request-header https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js
 
 [task_local]
-10 9 * * * https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/v2ex/v2ex.js, tag=V2EX 每日签到, enabled=true
+10 9 * * * https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js, tag=V2EX 每日签到, enabled=true
 
 [MITM]
 hostname = %APPEND% www.v2ex.com
@@ -37,8 +37,8 @@ hostname = %APPEND% www.v2ex.com
 
 ```ini
 [Script]
-http-request ^https://www\.v2ex\.com/(mission|member).*$ script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/v2ex/v2ex.js, requires-body=false, tag=V2EX 抓包
-cron "10 9 * * *" script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/v2ex/v2ex.js, tag=V2EX 签到, enabled=true
+http-request ^https://www\.v2ex\.com/(mission|member).*$ script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js, requires-body=false, tag=V2EX 抓包
+cron "10 9 * * *" script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js, tag=V2EX 签到, enabled=true
 
 [MITM]
 hostname = www.v2ex.com
@@ -48,8 +48,8 @@ hostname = www.v2ex.com
 
 ```ini
 [Script]
-V2EX 抓包 = type=http-request, pattern=^https://www\.v2ex\.com/(mission|member).* , requires-body=0, script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/v2ex/v2ex.js
-V2EX 签到 = type=cron, cronexp="10 9 * * *", script-path=https://raw.githubusercontent.com/curtinp118/Scripthub/main/scripts/v2ex/v2ex.js, timeout=60
+V2EX 抓包 = type=http-request, pattern=^https://www\.v2ex\.com/(mission|member).* , requires-body=0, script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js
+V2EX 签到 = type=cron, cronexp="10 9 * * *", script-path=https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/v2ex/v2ex.js, timeout=60
 
 [MITM]
 hostname = %APPEND% www.v2ex.com
