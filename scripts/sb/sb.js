@@ -1,8 +1,8 @@
 /*
- * 烧饼论坛每日签到 | v1.0.1 | 2026-09-27
+ * 烧饼论坛每日签到 | v1.0.2 | 2026-09-28
  * Author: liuzhihang
  * Platform: Loon 3.5.1+
- * 登录后刷新 https://sb.sb/signin/ 保存会话；每天 9:20 签到。
+ * 登录后刷新 https://sb.sb/checkin/ 保存会话；每天 9:20 签到。
  * 仅提交签到所需的 CSRF 字段，不填写留言，不重试 POST。
  */
 (function () {
@@ -11,7 +11,7 @@
   var TITLE = "烧饼论坛";
   var KEY = "SB_Session";
   var ORIGIN = "https://sb.sb";
-  var DAILY = ORIGIN + "/signin/";
+  var DAILY = ORIGIN + "/checkin/";
   var capture = typeof $request !== "undefined";
 
   function header(headers, name) {
@@ -72,13 +72,14 @@
     for (var i = 0; i < forms.length; i++) {
       var form = forms[i], opening = form.slice(0, form.indexOf(">") + 1);
       if (attr(opening, "method").toLowerCase() !== "post") continue;
-      if (["/signin/", DAILY].indexOf(attr(opening, "action")) < 0) continue;
+      var target = attr(opening, "action");
+      if (["/checkin/", DAILY, "/signin/", ORIGIN + "/signin/"].indexOf(target) < 0) continue;
       if (!form.includes("立即签到")) continue;
       if (/cf-turnstile|g-recaptcha|h-captcha|captcha-response/i.test(form)) return { state: "challenge" };
       var inputs = form.match(/<input\b[^>]*>/gi) || [];
       var csrf = inputs.find(function (input) { return attr(input, "name") === "_csrf"; });
       var token = csrf ? attr(csrf, "value") : "";
-      if (token && token.length <= 512) return { state: "ready", csrf: token };
+      if (token && token.length <= 512) return { state: "ready", csrf: token, url: target[0] === "/" ? ORIGIN + target : target };
     }
     return { state: "unknown" };
   }
@@ -121,8 +122,14 @@
   function redirectPath(location) {
     if (location.indexOf(ORIGIN + "/") === 0) location = location.slice(ORIGIN.length);
     if (/^\/login\/(?:\?|$)/.test(location)) throw new Error("登录已失效，请重新登录并刷新签到页");
-    if (!/^\/signin\/(?:\?[^\s\\]*)?$/.test(location)) throw new Error("签到请求发生异常跳转，已停止");
+    if (!/^\/(?:checkin|signin)\/(?:\?[^\s\\]*)?$/.test(location)) throw new Error("签到请求发生异常跳转，已停止");
     return ORIGIN + location;
+  }
+
+  function safePath(url) {
+    return String(url || "").replace(/[?#][\s\S]*$/, "")
+      .replace(/^(https?:\/\/|\/\/)[^/]*@/i, "$1[REDACTED]@")
+      .replace(/[\x00-\x1f\x7f]/g, "").slice(0, 160) || "(缺失)";
   }
 
   function request(method, session, csrf, url, hops) {
@@ -145,10 +152,13 @@
       $httpClient[method === "POST" ? "post" : "get"](options, function (error, response, body) {
         if (error || !response) return reject(new Error(method === "POST" ? "签到提交的网络结果不确定，请在网页核实；未重复提交" : "签到页请求失败，请检查网络"));
         var status = Number(response.status || response.statusCode);
+        console.log("HTTP     : " + method + " " + safePath(url.slice(ORIGIN.length)) + " -> " + status);
         try {
           updateCookies(session, response.headers || {});
           if (status >= 300 && status < 400) {
-            var next = redirectPath(String(header(response.headers, "location")));
+            var location = String(header(response.headers, "location"));
+            console.log("Location : " + safePath(location));
+            var next = redirectPath(location);
             if ((hops || 0) >= 2) throw new Error("签到页面重定向次数过多");
             if (method === "POST" && status !== 302 && status !== 303) throw new Error("签到提交发生异常跳转；未重复提交");
             return resolve(request("GET", session, "", next, (hops || 0) + 1));
@@ -167,10 +177,10 @@
   }
 
   async function run() {
-    console.log("🚀 " + TITLE + " | v1.0.1 | Loon | " + (capture ? "Capture" : "Cron"));
+    console.log("🚀 " + TITLE + " | v1.0.2 | Loon | " + (capture ? "Capture" : "Cron"));
     console.log("Time     : " + new Date().toISOString());
     if (capture) {
-      if (!/^https:\/\/sb\.sb\/signin\/(?:\?.*)?$/.test($request.url || "") || String($request.method || "GET").toUpperCase() !== "GET") throw new Error("不是受支持的签到页请求，原有会话保留");
+      if (!/^https:\/\/sb\.sb\/(?:checkin|signin)\/(?:\?.*)?$/.test($request.url || "") || String($request.method || "GET").toUpperCase() !== "GET") throw new Error("不是受支持的签到页请求，原有会话保留");
       if (typeof $response === "undefined" || Number($response.status || $response.statusCode) !== 200) throw new Error("签到页响应未成功，原有会话保留");
       var session = { cookie: header($request.headers, "cookie"), userAgent: header($request.headers, "user-agent") };
       if (!session.cookie || !session.userAgent) throw new Error("未获取到完整登录会话，原有会话保留");
@@ -182,14 +192,14 @@
     }
     var raw = $persistentStore.read(KEY), stored;
     try { stored = JSON.parse(raw || "null"); } catch (_) { stored = null; }
-    if (!stored || typeof stored.cookie !== "string" || !stored.cookie || typeof stored.userAgent !== "string" || !stored.userAgent) throw new Error("未保存登录会话，请登录并刷新 https://sb.sb/signin/");
+    if (!stored || typeof stored.cookie !== "string" || !stored.cookie || typeof stored.userAgent !== "string" || !stored.userAgent) throw new Error("未保存登录会话，请登录并刷新 https://sb.sb/checkin/");
     var before = validPage(parsePage(await request("GET", stored)));
     save(stored);
     if (before.state === "signed") {
       report("🔁 今日已签到", "服务器已确认，未重复提交");
       return;
     }
-    await request("POST", stored, before.csrf);
+    await request("POST", stored, before.csrf, before.url);
     var after = validPage(parsePage(await request("GET", stored)));
     if (after.state !== "signed") throw new Error("提交后尚未确认签到成功，请在网页核实；未重复提交");
     save(stored);

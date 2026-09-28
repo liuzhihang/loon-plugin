@@ -4,9 +4,10 @@ const { join } = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
 const source = readFileSync(join(__dirname, '../scripts/sb/sb.js'), 'utf8');
-const daily = 'https://sb.sb/signin/';
+const daily = 'https://sb.sb/checkin/';
+const legacyDaily = 'https://sb.sb/signin/';
 const session = { cookie: 'session=fixture-secret; csrf=old-cookie', userAgent: 'fixture-iPhone-Safari' };
-const ready = `<h1>每日签到</h1><div class="signin-hero-action"><form action="/signin/" method="post">
+const ready = `<h1>每日签到</h1><div class="signin-hero-action"><form action="/checkin/" method="post">
   <input value="fresh&amp;token" name="_csrf" type="hidden">
   <input name="message" placeholder="留言（可选）"><button type="submit">立即签到</button>
 </form></div>`;
@@ -56,6 +57,31 @@ test('signed-in capture accepts the completed daily page', async () => {
   assert.deepEqual(JSON.parse(r.store.get('SB_Session')), session);
 });
 
+test('both current and legacy daily URLs can capture a validated session', async () => {
+  for (const url of [daily, legacyDaily, daily + '?from=nav', legacyDaily + '?from=nav']) {
+    const r = await run({ request: { ...capture(), url }, response: { status: 200, body: ready } });
+    assert.deepEqual(JSON.parse(r.store.get('SB_Session')), session);
+    assert.match(r.logs, /登录会话已更新/);
+  }
+});
+
+test('the Loon plugin captures only the current and legacy same-origin daily pages', () => {
+  const plugin = readFileSync(join(__dirname, '../plugins/sb.lpx'), 'utf8');
+  const rule = plugin.split('\n').find(line => line.startsWith('response if '));
+  const pattern = new RegExp(rule.match(/ ~= \/(.*)\/ && /)[1]);
+  for (const url of [daily, legacyDaily, daily + '?from=nav']) assert.ok(pattern.test(url));
+  for (const url of ['https://example.test/checkin/', 'https://sb.sb.example.test/checkin/', 'https://sb.sb/settings/']) assert.equal(pattern.test(url), false);
+  assert.match(rule, /\$\{response\.status\} == 200/);
+});
+
+test('the migrated checkin route is requested directly instead of the old 301 endpoint', async () => {
+  const r = await run({ initial: values(), reply: call => call.url === legacyDaily
+    ? { status: 301, headers: { Location: '/checkin/' } } : { body: signed } });
+  assert.match(r.logs, /今日已签到/);
+  assert.equal(r.calls.length, 1);
+  assert.equal(r.calls[0].url, daily);
+});
+
 test('login, error, unsupported domain and POST captures preserve the old session', async () => {
   for (const entry of [
     { request: capture(), response: { status: 200, body: login } },
@@ -90,7 +116,7 @@ test('fresh CSRF and rotated cookies are used once, with no message and a final 
       assert.equal(call.body, '_csrf=fresh%26token');
       assert.match(call.headers.Cookie, /csrf=new-cookie/);
       posted = true;
-      return { status: 303, headers: { Location: '/signin/' } };
+      return { status: 303, headers: { Location: '/checkin/' } };
     }
     return { body: posted ? signed : ready, headers: { 'set-cookie': 'csrf=new-cookie; Expires=Wed, 30 Sep 2026 10:00:00 GMT; Path=/' } };
   } });
@@ -103,6 +129,27 @@ test('fresh CSRF and rotated cookies are used once, with no message and a final 
     assert.equal(c['auto-cookie'], false);
     assert.equal(c['auto-redirect'], false);
     assert.equal(c.insecure, false);
+  }
+});
+
+test('POST goes only to a recognized same-origin form action', async () => {
+  for (const action of ['/checkin/', daily, '/signin/', legacyDaily]) {
+    let posted = false;
+    const body = ready.replace('action="/checkin/"', `action="${action}"`);
+    const r = await run({ initial: values(), reply: call => {
+      if (call.method === 'POST') posted = true;
+      return { body: posted ? signed : body };
+    } });
+    const posts = r.calls.filter(call => call.method === 'POST');
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].url, new URL(action, daily).href);
+    assert.equal(posts[0].body, '_csrf=fresh%26token');
+    assert.match(r.logs, /✅ 签到成功/);
+  }
+  for (const action of ['https://example.test/checkin/', '//example.test/checkin/', '/settings/', '/checkin/../settings/']) {
+    const r = await run({ initial: values(), reply: () => ({ body: ready.replace('action="/checkin/"', `action="${action}"`) }) });
+    assert.equal(r.calls.filter(call => call.method === 'POST').length, 0);
+    assert.match(r.logs, /未识别到签到状态/);
   }
 });
 
@@ -142,14 +189,39 @@ test('missing CSRF, browser challenge and login pages cause no POST', async () =
 });
 
 test('redirects never forward credentials off-site or resend a POST', async () => {
-  for (const location of ['https://example.test/signin/', '//example.test/signin/', 'https://sb.sb.example.test/signin/', '/signin/\\example.test']) {
+  for (const location of ['https://example.test/checkin/', '//example.test/checkin/', 'https://sb.sb.example.test/checkin/', '/checkin/\\example.test', '/checkin/../settings/', 'https://sb.sb@evil.test/checkin/']) {
     const r = await run({ initial: values(), reply: () => ({ status: 302, headers: { Location: location } }) });
     assert.equal(r.calls.length, 1);
     assert.match(r.logs, /异常跳转/);
   }
-  const r = await run({ initial: values(), reply: call => call.method === 'POST' ? { status: 307, headers: { Location: daily } } : { body: ready } });
-  assert.equal(r.calls.filter(c => c.method === 'POST').length, 1);
-  assert.doesNotMatch(r.logs, /✅ 签到成功/);
+  for (const status of [301, 307, 308]) {
+    const r = await run({ initial: values(), reply: call => call.method === 'POST' ? { status, headers: { Location: daily } } : { body: ready } });
+    assert.equal(r.calls.length, 2);
+    assert.equal(r.calls.filter(c => c.method === 'POST').length, 1);
+    assert.doesNotMatch(r.logs, /✅ 签到成功/);
+  }
+});
+
+test('GET redirects between recognized daily routes remain bounded', async () => {
+  const r = await run({ initial: values(), reply: (_, calls) => calls.length === 1
+    ? { status: 302, headers: { Location: '/signin/' } } : calls.length === 2
+      ? { status: 301, headers: { Location: '/checkin/' } } : { body: signed } });
+  assert.deepEqual(r.calls.map(call => call.url), [daily, legacyDaily, daily]);
+  assert.ok(r.calls.every(call => call.method === 'GET'));
+  assert.match(r.logs, /今日已签到/);
+  const loop = await run({ initial: values(), reply: () => ({ status: 302, headers: { Location: '/checkin/' } }) });
+  assert.equal(loop.calls.length, 3);
+  assert.match(loop.logs, /重定向次数过多/);
+});
+
+test('redirect diagnostics show method, status and path without query credentials', async () => {
+  const r = await run({ initial: values(), reply: (_, calls) => calls.length === 1
+    ? { status: 302, headers: { Location: '/login/?token=private-token#private-fragment' } } : { body: signed } });
+  assert.equal(r.calls.length, 1);
+  assert.match(r.logs, /GET \/checkin\/.*302/);
+  assert.match(r.logs, /Location\s+: \/login\//);
+  assert.match(r.logs, /登录已失效/);
+  assert.doesNotMatch(r.logs, /private-token|private-fragment/);
 });
 
 test('HTTP errors and uncertain submission never produce success or a retry', async () => {

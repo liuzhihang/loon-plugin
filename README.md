@@ -29,7 +29,7 @@ GLaDOS 的详细步骤见 [使用说明](scripts/glados/README.md)。安装新�
 
 V2EX 支持 Edge 的浏览器登录会话。安装后登录并刷新 [Edge 每日任务](https://edge.v2ex.com/mission/daily)，保存会话后在同域名签到，详见 [使用说明](scripts/v2ex/README.md)。
 
-烧饼论坛安装后登录并刷新 [每日签到页](https://sb.sb/signin/)，保存会话后每天 9:20 签到，不填写签到留言，详见 [使用说明](scripts/sb/README.md)。
+烧饼论坛安装后登录并刷新 [每日签到页](https://sb.sb/checkin/)，保存会话后每天 9:20 签到，不填写签到留言，详见 [使用说明](scripts/sb/README.md)。
 
 ## 自动化风险
 
