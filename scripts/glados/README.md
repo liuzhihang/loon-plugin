@@ -49,6 +49,8 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/glados.lpx
 
 通过 iCloud 替换插件地址后，若请求记录只有 `glados.one:443` 等 TCP 连接、没有完整的 `/api/user/status` URL 和抓取任务，可断开并重新连接 Loon，再刷新控制台。插件列表已更新不代表旧连接已应用新的 MitM 规则。以抓取日志中的“账号 Cookie 已更新”和后续签到接口结果为准；当天已签到时返回“重复签到”属于正常结果。
 
+更新插件及其引用的远程 `glados.js` 后，以抓包或签到日志中的 `Version : v1.4.2` 确认新版生效。重新抓取 Cookie 只更新账号凭据，不会更新脚本；若日志仍是旧版本，检查脚本地址是否指向本仓库并重新下载远程脚本，无需为升级清空账号数据。
+
 ### Surge
 
 ```ini
@@ -72,12 +74,17 @@ hostname = %APPEND% glados.network, railgun.info, glados.vip, glados.one, glados
 - 出现 `Automated check-in detected` 时，说明服务器已拒绝当次自动签到。应暂停定时任务，在官网核实账号与规则；重新登录或更新 Cookie 不代表自动化获准，也不保证不会再次触发限制。
 - 普通会话过期时，可在网站验证登录状态并刷新控制台更新 Cookie；脚本不会绕过服务端限制。
 - 日志中的 Stored 仅代表本地存在凭据，账户接口和签到接口的验证结果分别处理。
+- 签到前的账号状态查询遇到网络错误、HTTP 408/500/502/503/504 或无法解析的响应时，等待 2 秒后最多重试一次；查询仍失败则停止该账号本次任务。签到、兑换及签到后的查询不自动重试。
+- HTTP 401 或明确的登录失效信息才提示重新登录并抓取 Cookie；HTTP 403、429、自动化检测及网页验证单独报告，不自动重试。未知接口错误或缺少账号邮箱不会被当成 Cookie 过期。
+- 日志保留 HTTP 状态、接口 code 和错误摘要，隐藏已知 Cookie 值及常见凭据字段，不输出完整响应体。发生问题时可提供 `Status query`、`Status`、`Message` 几行用于排查。
+- `code=1` 只有配合已识别的重复签到消息才算“重复签到”，包括 `Checkin repeats! Please try tomorrow.` 和 `Today's observation logged. Return tomorrow for more points.`；未知消息按“签到结果未确认”处理。
 - Cookie 和 User-Agent 的请求头名称按大小写无关方式读取。
 - Loon 中的接口请求不跟随重定向；遇到重定向时，请在原域名核实登录状态。
 - 仅签到成功或明确重复签到时允许积分 ≥500 自动兑换；签到失败、需要重新登录或结果未确认时跳过兑换。
 
 ## 更新记录
 
+- v1.4.2 - 区分账号查询异常与登录失效，临时查询失败最多重试一次，保留脱敏错误原因；收紧重复签到识别，失败后停止该账号后续请求
 - v1.4.1 - 兼容请求头大小写，Loon 禁止接口自动重定向，签到失败时跳过积分兑换
 - v1.4.0 - 同账号 Cookie 替换、浏览器 User-Agent 保存、Loon 3.5.1 插件入口与响应字段兼容、重新登录错误分类
 

@@ -1,7 +1,7 @@
 /****************************** 
 脚本功能：GLaDOS / Railgun 自动签到 + 积分兑换（多账号版）
-Version  : v1.4.1
-更新时间：2026-09-27
+Version  : v1.4.2
+更新时间：2026-09-28
 作者：Curtinp118
 Platform : Quantumult X / Loon / Surge
 
@@ -108,7 +108,7 @@ var Logger = {
 
 // ========== 工具函数 ==========
 var SCRIPT_NAME = "GLaDOS";
-var SCRIPT_VERSION = "v1.4.1";
+var SCRIPT_VERSION = "v1.4.2";
 var COOKIES_KEY_PREFIX = "GLaDOS_Cookies";
 var ACCOUNT_META_PREFIX = "GLaDOS_AccountMeta";
 var DOMAINS_LIST_KEY = "GLaDOS_Domains";
@@ -123,6 +123,61 @@ function safeJsonParse(str) {
 function readHeader(headers, name) {
   var key = Object.keys(headers || {}).filter(function (key) { return key.toLowerCase() === name.toLowerCase(); })[0];
   return key ? headers[key] : "";
+}
+
+function diagnosticText(value, cookie) {
+  var text = value === undefined || value === null ? "" : String(value);
+  var secrets = [cookie || ""].concat(String(cookie || "").split(";").map(function (part) {
+    var separator = part.indexOf("=");
+    return separator < 0 ? "" : part.substring(separator + 1).trim();
+  }));
+  secrets.forEach(function (secret) {
+    if (secret) text = text.split(secret).join("[REDACTED]");
+  });
+  return text.replace(/\b(Bearer\s+)[^\s,;]+/gi, "$1[REDACTED]")
+    .replace(/\b((?:cookie|set-cookie|authorization|token|session|access_token|refresh_token)\s*[:=]\s*)[^\s,;]+/gi, "$1[REDACTED]")
+    .replace(/([?&][^=\s&#]+)=([^&\s#]+)/g, "$1=[REDACTED]")
+    .replace(/[\x00-\x1f\x7f]+/g, " ").substring(0, 240);
+}
+
+function responseDetails(resp, cookie) {
+  var data = resp.data || {};
+  var details = [resp.statusCode ? "HTTP " + resp.statusCode : "网络请求失败"];
+  if (typeof data.code === "number" || typeof data.code === "string") details.push("code=" + diagnosticText(data.code, cookie));
+  if (resp.error) details.push(diagnosticText(resp.error, cookie));
+  if (typeof data.message === "string" && data.message) details.push(diagnosticText(data.message, cookie));
+  return details.join("; ");
+}
+
+// 只分类响应；重试仅由签到前的只读账号查询决定，POST 不重试。
+function responseFailure(resp, cookie, status) {
+  var message = resp.data && typeof resp.data.message === "string" ? resp.data.message : "";
+  var challenge = message + (resp.data ? "" : String(resp.raw || "").substring(0, 4096));
+  var failure = { status: status, code: -2, message: responseDetails(resp, cookie), points: "0", retryable: false };
+  if (resp.data && (typeof resp.data.code === "number" || typeof resp.data.code === "string")) failure.apiCode = diagnosticText(String(resp.data.code), cookie);
+  if (/automated check-in detected/i.test(message)) {
+    failure.status = "服务端拒绝自动签到，请到官网核实";
+  } else if (resp.statusCode === 429 || /too many requests|rate limit|请求过于频繁|操作频繁/i.test(message)) {
+    failure.status = "请求被限流，请稍后再试";
+  } else if (/captcha|cf-chl-|challenge-platform|just a moment|人机验证|验证码/i.test(challenge)) {
+    failure.status = "需要网页验证，请到官网核实";
+  } else if (resp.statusCode === 401 || /sign in again|not logged in|not signed in|login required|session expired|未登录|重新登录|登录已过期/i.test(message)) {
+    failure.status = "需要重新登录并抓取 Cookie";
+    failure.code = -3;
+    failure.needsLogin = true;
+  } else if (resp.statusCode === 403) {
+    failure.status = "访问被拒绝，请到官网核实";
+  } else if ((resp.statusCode === 0 && resp.error) || [408, 500, 502, 503, 504].indexOf(resp.statusCode) !== -1) {
+    failure.retryable = true;
+  } else if (resp.error || resp.statusCode !== 200) {
+    // 重定向及其他 HTTP 错误保留原因，但不自动重试。
+  } else if (!resp.data || typeof resp.data !== "object" || Array.isArray(resp.data)) {
+    failure.message += "; 响应不是有效的 JSON 对象";
+    failure.retryable = true;
+  } else {
+    return null;
+  }
+  return failure;
 }
 
 function getPlatform() {
@@ -253,29 +308,52 @@ function request(url, method, cookie, domain, body, userAgent) {
 // ========== API ==========
 function checkin(cookie, domain) {
   return request("https://" + domain + "/api/user/checkin", "POST", cookie, domain, { token: domain }).then(function (resp) {
-    if (resp.error) return { status: "签到失败", code: -2, message: resp.error, points: "0" };
-    if (!resp.data) return { status: "签到失败", code: -2, message: resp.raw, points: "0" };
+    var failure = responseFailure(resp, cookie, "签到失败");
+    if (failure) return failure;
     var data = resp.data;
     var code = data.code !== undefined ? data.code : -2;
-    var message = data.message || "";
+    var message = typeof data.message === "string" ? data.message.trim() : "";
     var points = String(data.points !== undefined ? data.points : 0);
-    if (/automated check-in detected|sign in again|not logged in|未登录|重新登录/i.test(message) || resp.statusCode === 401 || resp.statusCode === 403) {
-      return { status: "需要重新登录并抓取 Cookie", code: -3, apiCode: code, message: message, points: "0", needsLogin: true };
+    if (code === 0) return { status: "签到成功", code: 0, message: diagnosticText(message, cookie), points: points };
+    if (code === 1 && (/^checkin repeats[!.]?\s+please try tomorrow[!.]?$/i.test(message) ||
+        /^today['’]s observation logged\.\s+return tomorrow for more points\.?$/i.test(message))) {
+      return { status: "重复签到", code: 1, message: message, points: "0" };
     }
-    if (code === 0) return { status: "签到成功", code: 0, message: message, points: points };
-    if (code === 1) return { status: "重复签到", code: 1, message: message, points: "0" };
-    return { status: "签到失败", code: code, message: message, points: "0" };
+    return { status: "签到结果未确认", code: -2, apiCode: diagnosticText(String(code), cookie), message: responseDetails(resp, cookie), points: "0" };
   });
 }
 
 function getStatus(cookie, domain, userAgent) {
   return request("https://" + domain + "/api/user/status", "GET", cookie, domain, undefined, userAgent).then(function (resp) {
-    if (resp.error || !resp.data || resp.statusCode !== 200 || (resp.data.code !== undefined && resp.data.code !== 0)) return { leftDays: "N/A", email: "unknown" };
-    var data = resp.data.data || {};
-    var leftDays = data.leftDays;
+    var failure = responseFailure(resp, cookie, "账号状态查询失败");
+    var data = (resp.data && resp.data.data) || {};
     var email = typeof data.email === "string" && data.email.indexOf("@") > 0 ? data.email : "unknown";
-    var days = (leftDays !== undefined && leftDays !== null) ? parseInt(parseFloat(leftDays), 10) + " 天" : "N/A";
+    if (!failure && ((resp.data.code !== undefined && resp.data.code !== 0) || email === "unknown")) {
+      failure = { status: "账号状态查询失败", code: -2, points: "0", retryable: false,
+        message: responseDetails(resp, cookie) + (email === "unknown" ? "; 响应缺少有效账号邮箱" : "") };
+    }
+    if (failure) {
+      failure.leftDays = "N/A";
+      failure.email = "unknown";
+      return failure;
+    }
+    var leftDays = data.leftDays;
+    var days = isFinite(parseFloat(leftDays)) ? parseInt(parseFloat(leftDays), 10) + " 天" : "N/A";
     return { leftDays: days, email: email };
+  });
+}
+
+function getStatusBeforeCheckin(cookie, domain) {
+  return getStatus(cookie, domain).then(function (status) {
+    if (!status.retryable) return status;
+    Logger.field("Status query", status.message);
+    Logger.field("Retry", "账号状态查询 2 秒后重试，最多 1 次");
+    return new Promise(function (resolve) { setTimeout(resolve, 2000); }).then(function () {
+      return getStatus(cookie, domain);
+    }).then(function (retried) {
+      if (retried.email !== "unknown") Logger.field("Status query", "账号状态查询重试成功");
+      return retried;
+    });
   });
 }
 
@@ -304,16 +382,17 @@ function exchange(cookie, domain, plan) {
 function checkinForAccount(cookie, domain, accountIndex) {
   var statusBefore, checkinResult, pointsResult, exchangeResult, statusAfter, accountEmail;
 
-  return getStatus(cookie, domain).then(function (sb) {
+  Logger.accountHeader(accountIndex, domain);
+  return getStatusBeforeCheckin(cookie, domain).then(function (sb) {
     statusBefore = sb;
     accountEmail = sb.email;
     var displayEmail = accountEmail !== "unknown" ? accountEmail : "Account #" + accountIndex;
-    Logger.accountHeader(accountIndex, domain);
     Logger.field("Email", displayEmail);
-    if (accountEmail === "unknown") return { status: "账号验证失败", code: -3, message: "请检查网络或登录后重新抓取 Cookie", points: "0", needsLogin: true };
+    if (accountEmail === "unknown") return sb;
     return checkin(cookie, domain);
   }).then(function (cr) {
     checkinResult = cr;
+    if (cr.code !== 0 && cr.code !== 1) return { points: "N/A", pointsNum: 0 };
     return getPoints(cookie, domain);
   }).then(function (pr) {
     pointsResult = pr;
@@ -326,9 +405,11 @@ function checkinForAccount(cookie, domain, accountIndex) {
     return "跳过(积分不足)";
   }).then(function (er) {
     if (er) exchangeResult = er;
+    if (checkinResult.code !== 0 && checkinResult.code !== 1) return statusBefore;
     return getStatus(cookie, domain);
   }).then(function (sa) {
     statusAfter = sa;
+    if (sa !== statusBefore && sa.email === "unknown") Logger.field("Status after", sa.message);
 
     var icon = checkinResult.code === 0 ? "✅" : checkinResult.code === 1 ? "🔁" : "❌";
     Logger.status(icon, checkinResult.status);
