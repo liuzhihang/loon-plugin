@@ -1,6 +1,6 @@
 # loon-plugin
 
-个人维护的 Loon 签到插件，面向 Loon 3.5.1（983）及以上版本。目前维护 GLaDOS、V2EX 和烧饼论坛三项。
+个人维护的 Loon 签到插件，面向 Loon 3.5.1（983）及以上版本。目前维护 GLaDOS 和 V2EX 两项。
 
 本仓库由 [curtinp118/Scripthub](https://github.com/curtinp118/Scripthub) fork，曾合入 [liuzhihang/loon](https://github.com/liuzhihang/loon) 的配置与插件。现已移除未使用的脚本、规则集和主配置模板；两侧提交历史均保留，来源和许可证范围见 [UPSTREAM.md](UPSTREAM.md)。
 
@@ -11,8 +11,8 @@
 | 路径 | 内容 |
 | --- | --- |
 | `plugins/` | Loon 插件入口，脚本地址指向本仓库 |
-| `scripts/` | 三项签到脚本及各自的使用说明 |
-| `tests/` | GLaDOS、V2EX 和烧饼论坛的会话与签到离线回归测试 |
+| `scripts/` | 两项签到脚本及各自的使用说明 |
+| `tests/` | GLaDOS 和 V2EX 的会话与签到离线回归测试 |
 | `licenses/` | 按来源保留的许可证 |
 
 ## 使用
@@ -21,7 +21,6 @@
 
 - [GLaDOS 自动签到](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/glados.lpx)
 - [V2EX 每日签到](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/v2ex.lpx)
-- [烧饼论坛每日签到](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/sb.lpx)
 
 在现有个人配置中添加所需插件即可。
 
@@ -29,15 +28,11 @@ GLaDOS 的详细步骤见 [使用说明](scripts/glados/README.md)。安装新�
 
 V2EX 支持 Edge 的浏览器登录会话。安装后登录并刷新 [Edge 每日任务](https://edge.v2ex.com/mission/daily)，保存会话后在同域名签到，详见 [使用说明](scripts/v2ex/README.md)。
 
-烧饼论坛安装后登录并刷新 [每日签到页](https://sb.sb/checkin/)，保存会话后每天 9:20 签到，不填写签到留言，详见 [使用说明](scripts/sb/README.md)。
-
 ## 自动化风险
 
 实机签到成功只说明当次请求被接受，不代表站点允许自动化或保证账号不会受限。使用登录 Cookie、浏览器 User-Agent 或 Passkey 登录会话，均不能保证脚本无法被识别。
 
 出现自动化检测、验证码、限流或账号异常提示时，应暂停对应定时任务，在官网核实规则与账号状态，不反复重试或绕过限制。不能接受账号风险时，使用网站的手动签到。
-
-烧饼论坛的 [服务条款](https://sb.sb/pages/terms/) 和 [论坛规则](https://sb.sb/pages/rules/) 禁止绕过限流、验证码等控制，并保留封禁违规账号的处理方式；这不构成对单账号自动签到的明确授权。
 
 ## 验证
 

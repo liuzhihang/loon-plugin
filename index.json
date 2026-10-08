@@ -16,14 +16,5 @@
     "platforms": ["QX", "Loon", "Surge"],
     "cron": "10 9 * * *",
     "updated": "2026-09-27"
-  },
-  {
-    "name": "sb",
-    "file": "scripts/sb/sb.js",
-    "desc": "烧饼论坛每日签到（同站会话与 CSRF 校验）",
-    "author": "liuzhihang",
-    "platforms": ["Loon"],
-    "cron": "20 9 * * *",
-    "updated": "2026-09-27"
   }
 ]
