@@ -245,14 +245,38 @@ test('a failed account does not prevent the next account from completing', async
   assert.match(result.logs, /成功1 重复0 失败1/);
 });
 
-test('both observed duplicate messages are accepted and retain points exchange behavior', async () => {
-  for (const message of ['Checkin repeats! Please try tomorrow.', "Today's observation logged. Return tomorrow for more points."]) {
-    const result = await run({ initial: saved(['fixture-cookie']), reply: options => ({ body:
-      options.url.endsWith('/checkin') ? { code: 1, message } : options.url.endsWith('/points') ? { points: 504 }
+test('real duplicate retains points exchange behavior', async () => {
+  const result = await run({ initial: saved(['fixture-cookie']), reply: options => ({ body:
+    options.url.endsWith('/checkin') ? { code: 1, message: 'Checkin repeats! Please try tomorrow.' }
+      : options.url.endsWith('/points') ? { points: 504 }
         : options.url.endsWith('/exchange') ? { code: 0 } : status() }) });
-    assert.match(result.logs, /成功0 重复1 失败0/);
-    assert.equal(result.calls.filter(call => call.url.endsWith('/checkin')).length, 1);
-    assert.equal(result.calls.filter(call => call.url.endsWith('/exchange')).length, 1);
+  assert.match(result.logs, /成功0 重复1 失败0/);
+  assert.equal(result.calls.filter(call => call.url.endsWith('/checkin')).length, 1);
+  assert.equal(result.calls.filter(call => call.url.endsWith('/exchange')).length, 1);
+});
+
+test('recorded-today responses show successful account and summary notifications across platforms', async () => {
+  for (const platform of [{}, { qx: true }, { surge: true }]) {
+    for (const reward of [{}, { points: 4 }]) {
+      for (const balance of [372, 504]) {
+        const result = await run({ ...platform, initial: saved(['fixture-cookie']), reply: options => ({ body:
+          options.url.endsWith('/checkin') ? { code: 1, message: "Today's observation logged. Return tomorrow for more points.", ...reward }
+            : options.url.endsWith('/points') ? { points: balance }
+              : options.url.endsWith('/exchange') ? { code: 0 } : { code: 0, data: { email: 'alice@example.test', leftDays: 496 } } }) });
+        assert.match(result.logs, /Status\s+: ✅ 签到成功/);
+        assert.match(result.logs, /API code\s+: 1/);
+        assert.match(result.logs, /成功1 重复0 失败0/);
+        assert.match(result.logs, /Days left\s+: 496 天 → 496 天/);
+        assert.deepEqual(result.notifications[0], ['GLaDOS', '签到完成', '账号 1 | ✅1 🔁0 ❌0']);
+        assert.equal(result.notifications[1][0], '✅ alice@example.test');
+        assert.equal(result.notifications[1][1], reward.points ? '签到成功 | +4积分' : '签到成功');
+        if (!reward.points) assert.doesNotMatch(result.logs, /Points\s+: \+/);
+        assert.equal(result.calls.filter(call => call.url.endsWith('/checkin')).length, 1);
+        assert.equal(result.calls.filter(call => call.url.endsWith('/exchange')).length, balance >= 500 ? 1 : 0);
+        assert.equal(result.calls.filter(call => call.url.endsWith('/status')).length, 2);
+        assert.deepEqual(result.delays, [0]);
+      }
+    }
   }
 });
 
@@ -262,6 +286,9 @@ test('unknown code 1 and HTTP errors cannot count as success or duplicate', asyn
     { body: { code: 1 } },
     { status: 500, body: { code: 0, points: 4 } },
     { status: 503, body: { code: 1, message: 'Checkin repeats! Please try tomorrow.' } },
+    { status: 403, body: { code: 1, message: "Today's observation logged. Return tomorrow for more points." } },
+    { status: 503, body: { code: 1, message: "Today's observation logged. Return tomorrow for more points." } },
+    { body: { code: 2, message: "Today's observation logged. Return tomorrow for more points." } },
   ]) {
     const result = await run({ initial: saved(['fixture-cookie']), reply: options => options.url.endsWith('/checkin') ? response : { body: status() } });
     assert.match(result.logs, /成功0 重复0 失败1/);

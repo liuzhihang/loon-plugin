@@ -1,7 +1,7 @@
 /****************************** 
 脚本功能：GLaDOS / Railgun 自动签到 + 积分兑换（多账号版）
-Version  : v1.4.2
-更新时间：2026-09-28
+Version  : v1.4.3
+更新时间：2026-10-08
 作者：Curtinp118
 Platform : Quantumult X / Loon / Surge
 
@@ -108,7 +108,7 @@ var Logger = {
 
 // ========== 工具函数 ==========
 var SCRIPT_NAME = "GLaDOS";
-var SCRIPT_VERSION = "v1.4.2";
+var SCRIPT_VERSION = "v1.4.3";
 var COOKIES_KEY_PREFIX = "GLaDOS_Cookies";
 var ACCOUNT_META_PREFIX = "GLaDOS_AccountMeta";
 var DOMAINS_LIST_KEY = "GLaDOS_Domains";
@@ -315,8 +315,10 @@ function checkin(cookie, domain) {
     var message = typeof data.message === "string" ? data.message.trim() : "";
     var points = String(data.points !== undefined ? data.points : 0);
     if (code === 0) return { status: "签到成功", code: 0, message: diagnosticText(message, cookie), points: points };
-    if (code === 1 && (/^checkin repeats[!.]?\s+please try tomorrow[!.]?$/i.test(message) ||
-        /^today['’]s observation logged\.\s+return tomorrow for more points\.?$/i.test(message))) {
+    if (code === 1 && /^today['’]s observation logged\.\s+return tomorrow for more points\.?$/i.test(message)) {
+      return { status: "签到成功", code: 0, apiCode: "1", message: diagnosticText(message, cookie), points: points };
+    }
+    if (code === 1 && /^checkin repeats[!.]?\s+please try tomorrow[!.]?$/i.test(message)) {
       return { status: "重复签到", code: 1, message: message, points: "0" };
     }
     return { status: "签到结果未确认", code: -2, apiCode: diagnosticText(String(code), cookie), message: responseDetails(resp, cookie), points: "0" };

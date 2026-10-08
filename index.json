@@ -6,7 +6,7 @@
     "author": "Curtinp118",
     "platforms": ["QX", "Loon", "Surge"],
     "cron": "10 7 * * *",
-    "updated": "2026-09-27"
+    "updated": "2026-10-08"
   },
   {
     "name": "v2ex",
