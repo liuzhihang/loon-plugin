@@ -2,7 +2,9 @@
 脚本功能：V2EX 每日签到
 Version  : v1.3.1
 更新时间：2026-09-27
-作者：Curtinp118
+原作者：Curtinp118
+更新维护：liuzhihang
+维护地址：https://github.com/liuzhihang/loon-plugin
 Platform : Quantumult X / Loon / Surge
 
 使用说明：

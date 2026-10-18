@@ -1,6 +1,6 @@
 #!name=GLaDOS 自动签到
 #!desc=GLaDOS / Railgun 自动签到 + 积分兑换；刷新控制台更新同账号 Cookie
-#!author=Curtinp118, liuzhihang
+#!author=Curtinp118（原作者）, liuzhihang（更新维护）
 #!homepage=https://github.com/liuzhihang/loon-plugin
 #!icon=https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/GlaDos.png
 #!tag=Check-in

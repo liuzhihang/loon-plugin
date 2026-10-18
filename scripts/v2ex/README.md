@@ -1,5 +1,9 @@
 # V2EX 每日签到
 
+原作者：[Curtinp118](https://github.com/curtinp118) · 更新维护：[liuzhihang](https://github.com/liuzhihang)
+
+脚本来源：[curtinp118/Scripthub](https://github.com/curtinp118/Scripthub/tree/main/scripts/v2ex)；当前维护与反馈：[liuzhihang/loon-plugin](https://github.com/liuzhihang/loon-plugin)。
+
 ## 功能说明
 
 - 自动完成 V2EX 每日签到领取铜币
@@ -39,7 +43,7 @@ hostname = %APPEND% www.v2ex.com, edge.v2ex.com, v2ex.com
 
 ### Loon
 
-Loon 3.5.1（983）及以上，从以下地址添加插件：
+需要 Loon 3.5.1（983）或以上。可从[仓库首页快捷安装](../../README.md#快捷安装)，或在 Loon 的插件页面从下面的 URL 添加：
 
 ```text
 https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/v2ex.lpx

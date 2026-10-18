@@ -1,6 +1,6 @@
 #!name=V2EX 每日签到
 #!desc=V2EX 每日签到领取铜币；支持 Edge 登录后刷新每日任务保存会话
-#!author=Curtinp118, liuzhihang
+#!author=Curtinp118（原作者）, liuzhihang（更新维护）
 #!homepage=https://github.com/liuzhihang/loon-plugin
 #!icon=https://raw.githubusercontent.com/lige47/QuanX-icon-rule/main/icon/04ProxySoft/V2ex.png
 #!tag=Check-in

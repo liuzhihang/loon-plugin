@@ -9,6 +9,14 @@
 
 Loon 来源的原始 MIT 许可证完整保留于 [licenses/Loon-MIT.txt](licenses/Loon-MIT.txt)，适用于该来源的文件。保留各文件中的原作者信息。
 
+## 原作者与更新维护
+
+- 原作者：[Curtinp118](https://github.com/curtinp118)。GLaDOS、V2EX 脚本来自 `curtinp118/Scripthub`，插件入口来自 `curtinp118/Loon`，均保留原始署名。
+- 更新维护：[liuzhihang](https://github.com/liuzhihang)。负责本仓库的 Loon 适配、会话与签到逻辑修复、离线测试、安装说明及后续更新；维护地址为 [liuzhihang/loon-plugin](https://github.com/liuzhihang/loon-plugin)。
+- `index.json` 中的 `author` 保留原作者，`maintainer` 记录当前更新维护人；插件的 `#!author` 与脚本头分别标明两者角色。
+
+## 维护范围
+
 上述表格记录合并时的范围。2026-09-27 按实际使用范围精简后，已移除蛋蛋不语及其他未接入的上游脚本、`rules/` 和 `profile/`。当前目录只保留 GLaDOS 和 V2EX 两个插件、对应脚本、说明和测试。删除未重写 Git 历史，原文件仍可从合并基线和后续提交中追溯。
 
 Scripthub 在上述基线没有 LICENSE 文件，也没有在 README 中声明开源许可证。本仓库保留 GitHub fork 关系和原有声明，不将这部分代码重新标记为 MIT。公开仓库可见性和 fork 功能不等同于授予任意再许可的权利。

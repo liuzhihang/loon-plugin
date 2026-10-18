@@ -2,7 +2,9 @@
 脚本功能：GLaDOS / Railgun 自动签到 + 积分兑换（多账号版）
 Version  : v1.4.3
 更新时间：2026-10-08
-作者：Curtinp118
+原作者：Curtinp118
+更新维护：liuzhihang
+维护地址：https://github.com/liuzhihang/loon-plugin
 Platform : Quantumult X / Loon / Surge
 
 使用说明：

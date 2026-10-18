@@ -4,6 +4,7 @@
     "file": "scripts/glados/glados.js",
     "desc": "GLaDOS / Railgun 自动签到 + 积分兑换（多账号版）",
     "author": "Curtinp118",
+    "maintainer": "liuzhihang",
     "platforms": ["QX", "Loon", "Surge"],
     "cron": "10 7 * * *",
     "updated": "2026-10-08"
@@ -13,6 +14,7 @@
     "file": "scripts/v2ex/v2ex.js",
     "desc": "V2EX 每日签到领取铜币（支持 Edge 登录会话）",
     "author": "Curtinp118",
+    "maintainer": "liuzhihang",
     "platforms": ["QX", "Loon", "Surge"],
     "cron": "10 9 * * *",
     "updated": "2026-09-27"
