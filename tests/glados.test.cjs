@@ -4,17 +4,20 @@ const { join } = require('node:path');
 const vm = require('node:vm');
 const { test } = require('node:test');
 const source = readFileSync(process.env.GLADOS_TEST_SOURCE || join(__dirname, '../scripts/glados/glados.js'), 'utf8');
+const pluginSource = readFileSync(join(__dirname, '../plugins/glados.lpx'), 'utf8');
 const domain = 'glados.one';
+const domains = ['glados.network', 'railgun.info', 'glados.vip', 'glados.one', 'glados.space'];
 const key = `GLaDOS_Cookies:${domain}`;
 const metaKey = `GLaDOS_AccountMeta:${domain}`;
 const ua = 'Mozilla/5.0 (iPhone; test fixture) Safari/604.1';
 const status = (email = 'alice@example.test') => ({ code: 0, data: { email, leftDays: 506.5 } });
-const capture = (cookie) => ({ url: `https://${domain}/api/user/status`, headers: { Cookie: cookie, 'User-Agent': ua } });
-const saved = (cookies) => ({ GLaDOS_Domains: JSON.stringify([domain]), [key]: JSON.stringify(cookies) });
+const capture = (cookie, host = domain, method = 'GET', path = '/console/account') => ({ url: `https://${host}${path}`, method, headers: { Cookie: cookie, 'User-Agent': ua } });
+const saved = (cookies, host = domain, metadata) => ({ GLaDOS_Domains: JSON.stringify([host]), [`GLaDOS_Cookies:${host}`]: JSON.stringify(cookies),
+  ...(metadata ? { [`GLaDOS_AccountMeta:${host}`]: JSON.stringify(metadata) } : {}) });
 
 async function run({ initial = {}, request, response, reply, writeOK = true, qx = false, surge = false } = {}) {
   const store = new Map(Object.entries(initial));
-  const logs = [], calls = [], notifications = [], delays = [];
+  const logs = [], calls = [], notifications = [], delays = [], reads = [], writes = [];
   let finish, done = 0;
   const finished = new Promise(resolve => { finish = resolve; });
   const send = (options, callback) => {
@@ -23,10 +26,11 @@ async function run({ initial = {}, request, response, reply, writeOK = true, qx 
     const body = result.rawBody !== undefined ? result.rawBody : JSON.stringify(result.body || {});
     queueMicrotask(() => callback(result.error || null, { status: result.status || 200, headers: result.headers || {} }, body));
   };
-  const write = (value, key) => { if (!writeOK) return false; store.set(key, value); return true; };
+  const read = key => { reads.push(key); return store.get(key); };
+  const write = (value, key) => { writes.push({ key, value }); if (!writeOK) return false; store.set(key, value); return true; };
   const sandbox = {
     console: { log: line => logs.push(String(line)) },
-    $persistentStore: { read: key => store.get(key), write },
+    $persistentStore: { read, write },
     $notification: { post: (...args) => notifications.push(args) }, $httpClient: { get: send, post: send },
     $done() { done++; finish(); },
     setTimeout: (callback, delay) => { delays.push(delay); queueMicrotask(callback); },
@@ -34,7 +38,7 @@ async function run({ initial = {}, request, response, reply, writeOK = true, qx 
   };
   if (qx) {
     sandbox.$task = { fetch: options => new Promise((resolve, reject) => send(options, (error, response, body) => error ? reject(error) : resolve({ statusCode: response.status, headers: response.headers, body }))) };
-    sandbox.$prefs = { valueForKey: key => store.get(key), setValueForKey: write };
+    sandbox.$prefs = { valueForKey: read, setValueForKey: write };
     sandbox.$notify = (...args) => notifications.push(args);
   } else if (!surge) sandbox.$loon = 'iPhone test 3.5.1(998)';
   if (request) sandbox.$request = request;
@@ -45,22 +49,77 @@ async function run({ initial = {}, request, response, reply, writeOK = true, qx 
   clearTimeout(timer);
   assert.notEqual(result, 'timeout', 'script must finish');
   assert.equal(done, 1);
-  return { store, calls, notifications, delays, logs: logs.join('\n') };
+  return { store, calls, notifications, delays, logs: logs.join('\n'), reads, writes };
 }
 
+test('Loon plugin request rule matches only GET on the exact account path for five domains', () => {
+  const rule = pluginSource.split(/\r?\n/).find(line => line.startsWith('request if '));
+  assert.ok(rule, 'plugin must use a request rule for capture');
+  assert.match(rule, /\$\{request\.method\} == "GET"/);
+  assert.match(rule, /requires_body=false/);
+  const literal = rule.match(/\$\{url\} ~= (\/.+\/) && \$\{request\.method\}/)?.[1];
+  assert.ok(literal, 'request rule must contain a URL matcher');
+  const matcher = new RegExp(literal.slice(1, -1));
+  for (const host of domains) {
+    assert.equal(matcher.test(`https://${host}/console/account`), true, host);
+    assert.equal(matcher.test(`https://${host}/console/account?tab=account`), true, `${host} query`);
+    assert.equal(matcher.test(`https://${host}/api/user/status`), false, `${host} status API`);
+    assert.equal(matcher.test(`https://${host}/console/account/`), false, `${host} trailing slash`);
+    assert.equal(matcher.test(`https://${host}/console/account/settings`), false, `${host} nested page`);
+  }
+  for (const url of ['https://unrelated.example.test/console/account', 'https://glados.one/console/accounts', 'http://glados.one/console/account']) {
+    assert.equal(matcher.test(url), false, url);
+  }
+});
+
+test('manual capture silently ignores other pages, status API, and non-GET requests', async () => {
+  const initial = saved(['existing'], domain, [{ cookie: 'existing', email: 'alice@example.test', userAgent: ua }]);
+  const cases = [
+    capture('secret', domain, 'GET', '/console/account/settings'),
+    capture('secret', domain, 'GET', '/console/account/'),
+    capture('secret', domain, 'GET', '/api/user/status'),
+    capture('secret', domain, 'POST', '/console/account'),
+    { ...capture('secret'), url: 'https://unrelated.example.test/console/account' },
+  ];
+  for (const request of cases) {
+    const result = await run({ initial, request, response: status() });
+    assert.equal(result.calls.length, 0, request.url);
+    assert.equal(result.reads.length, 0, request.url);
+    assert.equal(result.writes.length, 0, request.url);
+    assert.equal(result.notifications.length, 0, request.url);
+    assert.deepEqual(Object.fromEntries(result.store), initial, request.url);
+  }
+});
+
+test('manual capture accepts an omitted method for Loon compatibility', async () => {
+  const request = capture('legacy-method-cookie');
+  delete request.method;
+  const result = await run({ request, reply: () => ({ body: status() }) });
+  assert.deepEqual(JSON.parse(result.store.get(key)), ['legacy-method-cookie']);
+  assert.deepEqual(result.calls.map(call => `${call.method} ${new URL(call.url).pathname}`), ['GET /api/user/status']);
+});
+
 test('same-account refresh replaces duplicate old sessions and retains other accounts', async () => {
-  const result = await run({ initial: saved(['old-alice', 'bob', 'older-alice']), request: capture('fresh'), response: status('ALICE@example.test'),
+  const result = await run({ initial: saved(['old-alice', 'bob', 'older-alice']), request: capture('fresh'),
     reply: options => ({ body: status(options.headers.Cookie === 'bob' ? 'bob@example.test' : 'alice@example.test') }) });
   assert.deepEqual(JSON.parse(result.store.get(key)), ['bob', 'fresh']);
   assert.equal(JSON.parse(result.store.get(metaKey))[1].userAgent, ua);
+  assert.equal(result.calls.length, 4, 'validate the new cookie and identify legacy sessions before replacement');
+  assert.equal(result.calls[0].method, 'GET');
+  assert.equal(result.calls[0].url, `https://${domain}/api/user/status`);
+  assert.equal(result.calls[0].headers.Cookie, 'fresh');
   assert.match(result.logs, /账号 Cookie 已更新/);
+  assert.equal(result.notifications.length, 1);
   assert.doesNotMatch(result.logs, /old-alice|fresh|older-alice/);
 });
 
-test('same-cookie capture is idempotent without extra identity requests', async () => {
-  const result = await run({ initial: saved(['same']), request: capture('same'), response: status() });
+test('same-cookie capture silently skips without API lookup, write, or notification', async () => {
+  const initial = saved(['same'], domain, [{ cookie: 'same', email: 'alice@example.test', userAgent: ua }]);
+  const result = await run({ initial, request: capture('same') });
   assert.deepEqual(JSON.parse(result.store.get(key)), ['same']);
   assert.equal(result.calls.length, 0);
+  assert.equal(result.writes.length, 0);
+  assert.equal(result.notifications.length, 0);
 });
 
 test('capture reads Cookie and User-Agent without depending on header case', async () => {
@@ -69,37 +128,76 @@ test('capture reads Cookie and User-Agent without depending on header case', asy
     { COOKIE: 'fixture-cookie', 'USER-AGENT': ua },
     { cookie: 'fixture-cookie', 'user-agent': ua },
   ]) {
-    const request = { url: `https://${domain}/api/user/status`, headers };
-    const result = await run({ request, response: status() });
+    const request = { url: `https://${domain}/console/account?tab=account`, method: 'GET', headers };
+    const result = await run({ request, reply: () => ({ body: status() }) });
     assert.deepEqual(JSON.parse(result.store.get(key) || 'null'), ['fixture-cookie']);
     assert.equal(JSON.parse(result.store.get(metaKey))[0].userAgent, ua);
-    assert.equal(result.calls.length, 0);
+    assert.equal(result.calls.length, 1);
+    assert.equal(result.calls[0].method, 'GET');
+    assert.equal(result.calls[0].url, `https://${domain}/api/user/status`);
+    assert.equal(result.calls[0].headers.Cookie, 'fixture-cookie');
+    assert.equal(result.calls.filter(call => call.method === 'POST').length, 0);
+    assert.equal(result.notifications.length, 1);
     assert.doesNotMatch(result.logs, /fixture-cookie/);
   }
 });
 
+test('all five allowed domains validate the new cookie before saving', async () => {
+  for (const host of domains) {
+    const cookie = `cookie-${host}`;
+    const result = await run({ request: capture(cookie, host), reply: () => ({ body: status() }) });
+    assert.deepEqual(JSON.parse(result.store.get(`GLaDOS_Cookies:${host}`)), [cookie]);
+    assert.deepEqual(JSON.parse(result.store.get('GLaDOS_Domains')), [host]);
+    assert.equal(result.calls.length, 1, host);
+    assert.equal(result.calls[0].method, 'GET', host);
+    assert.equal(result.calls[0].url, `https://${host}/api/user/status`, host);
+    assert.equal(result.calls[0].headers.Cookie, cookie, host);
+    assert.equal(result.notifications.length, 1, host);
+  }
+});
+
 test('cached account identity permits replacement of an expired session', async () => {
-  const result = await run({ initial: { ...saved(['expired']), [metaKey]: JSON.stringify([{ cookie: 'expired', email: 'alice@example.test' }]) }, request: capture('fresh'), response: status() });
+  const result = await run({ initial: { ...saved(['expired']), [metaKey]: JSON.stringify([{ cookie: 'expired', email: 'alice@example.test' }]) }, request: capture('fresh'), reply: () => ({ body: status() }) });
   assert.deepEqual(JSON.parse(result.store.get(key)), ['fresh']);
-  assert.equal(result.calls.length, 0);
+  assert.equal(result.calls.length, 1);
 });
 
 test('unidentified legacy accounts are retained on lookup failure', async () => {
-  const result = await run({ initial: saved(['unknown']), request: capture('new'), response: status(), reply: () => ({ status: 401, body: { code: -1 } }) });
+  let queries = 0;
+  const result = await run({ initial: saved(['unknown']), request: capture('new'), reply: () => ++queries === 1
+    ? { body: status() } : { status: 401, body: { code: -1 } } });
   assert.deepEqual(JSON.parse(result.store.get(key)), ['unknown', 'new']);
+  assert.equal(result.calls.length, 2);
 });
 
-test('unsuccessful status capture cannot overwrite saved credentials', async () => {
-  const initial = saved(['existing']);
-  const result = await run({ initial, request: capture('invalid'), response: { code: -1, message: 'not logged in' } });
+test('unknown identity and invalid credentials cannot overwrite existing credentials', async () => {
+  const initial = saved(['existing'], domain, [{ cookie: 'existing', email: 'alice@example.test', userAgent: ua }]);
+  for (const invalid of [{ status: 401, body: { code: -1, message: 'not logged in' } }, { body: { code: 0, data: { leftDays: 30 } } }]) {
+    const result = await run({ initial, request: capture('invalid'), reply: () => invalid });
+    assert.deepEqual(Object.fromEntries(result.store), initial);
+    assert.equal(result.calls.length, 1);
+    assert.equal(result.calls[0].method, 'GET');
+    assert.equal(result.writes.length, 0);
+    assert.match(result.logs, /抓包保存失败/);
+  }
+});
+
+test('old response-triggered status API cannot save a cookie even with successful JSON', async () => {
+  const initial = saved(['existing'], domain, [{ cookie: 'existing', email: 'alice@example.test', userAgent: ua }]);
+  const request = capture('secret', domain, 'GET', '/api/user/status');
+  const result = await run({ initial, request, response: status() });
   assert.deepEqual(Object.fromEntries(result.store), initial);
   assert.equal(result.calls.length, 0);
+  assert.equal(result.reads.length, 0);
+  assert.equal(result.writes.length, 0);
+  assert.equal(result.notifications.length, 0);
 });
 
 test('QX request-only capture validates identity before saving', async () => {
-  const result = await run({ request: capture('qx-cookie'), qx: true });
+  const result = await run({ request: capture('qx-cookie'), qx: true, reply: () => ({ body: status() }) });
   assert.deepEqual(JSON.parse(result.store.get(key)), ['qx-cookie']);
   assert.equal(result.calls[0].headers['User-Agent'], ua);
+  assert.equal(result.calls[0].url, `https://${domain}/api/user/status`);
 });
 
 test('sign-in rejection with code 1 is failure and never redeems points', async () => {

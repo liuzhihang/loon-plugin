@@ -1,5 +1,5 @@
 #!name=GLaDOS 自动签到
-#!desc=GLaDOS / Railgun 自动签到 + 积分兑换；刷新控制台更新同账号 Cookie
+#!desc=GLaDOS / Railgun 自动签到 + 积分兑换；仅访问 /console/account 抓取 Cookie，相同 Cookie 静默跳过
 #!author=Curtinp118（原作者）, liuzhihang（更新维护）
 #!homepage=https://github.com/liuzhihang/loon-plugin
 #!icon=https://raw.githubusercontent.com/fmz200/wool_scripts/main/icons/apps/GlaDos.png
@@ -7,7 +7,7 @@
 #!loon_version=3.5.1(983)
 
 [Script]
-response if ${url} ~= /^https:\/\/(glados\.(network|vip|one|space)|railgun\.info)\/api\/user\/status(?:\?.*)?$/ && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/glados/glados.js") with requires_body=true, timeout=30, tag="GLaDOS抓包", enable=true
+request if ${url} ~= /^https:\/\/(glados\.(network|vip|one|space)|railgun\.info)\/console\/account(?:\?.*)?$/ && ${request.method} == "GET" then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/glados/glados.js") with requires_body=false, timeout=30, tag="GLaDOS抓包", enable=true
 cron "10 7 * * *" then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/glados/glados.js") with timeout=120, tag="GLaDOS签到", enable=true
 
 [MITM]

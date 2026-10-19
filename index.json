@@ -7,7 +7,7 @@
     "maintainer": "liuzhihang",
     "platforms": ["QX", "Loon", "Surge"],
     "cron": "10 7 * * *",
-    "updated": "2026-10-08"
+    "updated": "2026-10-19"
   },
   {
     "name": "v2ex",

@@ -1,14 +1,14 @@
 /****************************** 
 脚本功能：GLaDOS / Railgun 自动签到 + 积分兑换（多账号版）
-Version  : v1.4.3
-更新时间：2026-10-08
+Version  : v1.4.4
+更新时间：2026-10-19
 原作者：Curtinp118
 更新维护：liuzhihang
 维护地址：https://github.com/liuzhihang/loon-plugin
 Platform : Quantumult X / Loon / Surge
 
 使用说明：
-Loon 刷新控制台，捕获 /api/user/status 成功响应更新 Cookie；其他平台保留请求抓取方式。
+登录后打开并刷新 /console/account，验证身份后保存 Cookie；相同 Cookie 静默跳过。
 支持 glados.network、railgun.info、glados.vip、glados.one、glados.space，各域名支持多账号。
 
 [rewrite_local]
@@ -110,7 +110,7 @@ var Logger = {
 
 // ========== 工具函数 ==========
 var SCRIPT_NAME = "GLaDOS";
-var SCRIPT_VERSION = "v1.4.3";
+var SCRIPT_VERSION = "v1.4.4";
 var COOKIES_KEY_PREFIX = "GLaDOS_Cookies";
 var ACCOUNT_META_PREFIX = "GLaDOS_AccountMeta";
 var DOMAINS_LIST_KEY = "GLaDOS_Domains";
@@ -232,12 +232,9 @@ function findAccountMeta(domain, cookie) {
   return getAccountMeta(domain).filter(function (item) { return item.cookie === cookie; })[0] || {};
 }
 
-function saveCookie(domain, cookie, userAgent, verifiedEmail) {
-  var identity = verifiedEmail
-    ? Promise.resolve({ email: verifiedEmail })
-    : getStatus(cookie, domain, userAgent);
-  return identity.then(function (current) {
-    if (!current.email || current.email === "unknown") throw new Error("无法验证账号，请登录后刷新控制台");
+function saveCookie(domain, cookie, userAgent) {
+  return getStatus(cookie, domain, userAgent).then(function (current) {
+    if (!current.email || current.email === "unknown") throw new Error("无法验证账号，请登录后刷新 /console/account");
     var email = current.email.toLowerCase();
     var cookies = getCookiesForDomain(domain);
     // 旧版只有 Cookie 数组；先查询旧会话身份，保留无法识别的其他账号。
@@ -273,7 +270,7 @@ function saveCookie(domain, cookie, userAgent, verifiedEmail) {
 
 function getHostFromRequest() {
   var url = ($request && $request.url) || "";
-  var m = url.match(/^https:\/\/([^/:?#]+)/i);
+  var m = url.match(/^https:\/\/(glados\.(network|vip|one|space)|railgun\.info)\/console\/account(?:\?.*)?$/);
   return m ? m[1].toLowerCase() : "";
 }
 
@@ -445,36 +442,42 @@ function checkinForAccount(cookie, domain, accountIndex) {
 
 // ========== 主流程 ==========
 if (isGetHeader) {
-  Logger.scriptStart(SCRIPT_NAME, SCRIPT_VERSION, getPlatform(), "Manual");
-
-  var allHeaders = $request.headers || {};
-  var cookie = readHeader(allHeaders, "Cookie");
-  var userAgent = readHeader(allHeaders, "User-Agent");
   var host = getHostFromRequest();
-  var capturedResponse = typeof $response !== "undefined" ? safeJsonParse($response.body || "") : null;
-  var verifiedEmail = capturedResponse && (capturedResponse.code === 0 || capturedResponse.code === undefined) && capturedResponse.data && capturedResponse.data.email;
-  if (typeof verifiedEmail !== "string" || verifiedEmail.indexOf("@") < 1) verifiedEmail = null;
 
-  if (!cookie || !/^(glados\.(network|vip|one|space)|railgun\.info)$/.test(host) || (typeof $response !== "undefined" && !verifiedEmail)) {
-    Logger.status("⚠️", "抓包失败");
-    Logger.message("未获取到 Cookie 或 Host");
-    notifyFn("GLaDOS 抓包失败", "", "未获取到 Cookie 或 Host");
+  // 同时约束脚本入口，旧版 status 响应规则或其他页面也不会保存或弹窗。
+  if (!host || ($request.method && $request.method !== "GET")) {
     $done({});
   } else {
-    saveCookie(host, cookie, userAgent, verifiedEmail).then(function (result) {
-      var label = "账号 #" + (result.index + 1);
-      var message = result.isNew ? "新账号已保存" : "账号 Cookie 已更新";
-      Logger.status("✅", message);
-      Logger.field("Account", label);
-      Logger.field("Domain", host);
-      notifyFn("GLaDOS 抓包", message, label + " | " + host);
+    Logger.scriptStart(SCRIPT_NAME, SCRIPT_VERSION, getPlatform(), "Manual");
+
+    var allHeaders = $request.headers || {};
+    var cookie = readHeader(allHeaders, "Cookie");
+    var userAgent = readHeader(allHeaders, "User-Agent");
+
+    if (!cookie) {
+      Logger.status("⚠️", "抓包失败");
+      Logger.message("未获取到 Cookie");
+      notifyFn("GLaDOS 抓包失败", "", "请登录后刷新 /console/account");
       $done({});
-    }).catch(function () {
-      Logger.status("⚠️", "抓包保存失败");
-      Logger.message("请确认已登录并刷新控制台；原有其他账号保留");
-      notifyFn("GLaDOS 抓包失败", "请登录后刷新控制台", "未验证的 Cookie 不会新增为账号");
+    } else if (getCookiesForDomain(host).indexOf(cookie) !== -1) {
+      Logger.status("✅", "Cookie 未变化，跳过抓取");
       $done({});
-    });
+    } else {
+      saveCookie(host, cookie, userAgent).then(function (result) {
+        var label = "账号 #" + (result.index + 1);
+        var message = result.isNew ? "新账号已保存" : "账号 Cookie 已更新";
+        Logger.status("✅", message);
+        Logger.field("Account", label);
+        Logger.field("Domain", host);
+        notifyFn("GLaDOS 抓包", message, label + " | " + host);
+        $done({});
+      }).catch(function () {
+        Logger.status("⚠️", "抓包保存失败");
+        Logger.message("请确认已登录并刷新 /console/account；原有其他账号保留");
+        notifyFn("GLaDOS 抓包失败", "请登录后刷新 /console/account", "未验证的 Cookie 不会新增为账号");
+        $done({});
+      });
+    }
   }
 } else {
   var delay = Math.floor(Math.random() * 11);

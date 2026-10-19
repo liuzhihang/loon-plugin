@@ -43,17 +43,17 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/v2ex.lpx
 
 | 插件 | 登录后需要刷新的页面 | 首次保存成功提示 |
 | --- | --- | --- |
-| GLaDOS | 对应域名的控制台，例如 [glados.network 控制台](https://glados.network/console/account) | “新账号已保存”或“账号 Cookie 已更新” |
+| GLaDOS | 对应域名的 `/console/account`，例如 [glados.network 账号页](https://glados.network/console/account)；进入后刷新一次 | “新账号已保存”或“账号 Cookie 已更新”；相同 Cookie 静默跳过 |
 | V2EX | 登录域名的 `/mission/daily`，例如 [Edge 每日任务](https://edge.v2ex.com/mission/daily) | “登录会话已更新” |
 
-GLaDOS 在同一域名下按邮箱区分账号，同账号重新登录并抓取会更新旧 Cookie。V2EX 使用最后一次成功保存的会话，始终向该会话的原域名发送签到请求；Passkey 仅用于浏览器登录，脚本不读取或保存 Passkey。
+GLaDOS 仅在访问或刷新 `/console/account` 时抓取 Cookie，普通浏览和 `/api/user/status` 请求不会触发抓取通知。同一域名下按邮箱区分账号，同账号重新登录并抓取会更新旧 Cookie。V2EX 使用最后一次成功保存的会话，始终向该会话的原域名发送签到请求；Passkey 仅用于浏览器登录，脚本不读取或保存 Passkey。
 
 详细说明：[GLaDOS](scripts/glados/README.md) · [V2EX](scripts/v2ex/README.md) · [Loon 插件手册](https://nsloon.app/docs/Plugin/)
 
 ## 更新与排查
 
-- **更新版本**：在 Loon 中更新远程插件及其引用的远程 JS 脚本。当前功能版本为 GLaDOS `v1.4.3`、V2EX `v1.3.1`，以执行日志中的 `Version` 为准；账号数据无需为升级而清空。
-- **没有抓取通知**：检查插件、脚本、MitM 和证书信任状态。插件更新或 iCloud 同步后，若请求记录只有 `域名:443` 的 TCP 连接、没有完整页面 URL，可重新连接 Loon 后再刷新页面。
+- **更新版本**：在 Loon 中更新远程插件及其引用的远程 JS 脚本。当前功能版本为 GLaDOS `v1.4.4`、V2EX `v1.3.1`，以执行日志中的 `Version` 为准；账号数据无需为升级而清空。
+- **没有抓取通知**：GLaDOS 的相同 Cookie 会静默跳过，可在抓取日志中确认“Cookie 未变化，跳过抓取”。需要更新会话时，确认已登录并刷新 `/console/account`；仅在站内切换页面可能不会发起该页面请求。首次抓取仍无通知时，检查插件、脚本、MitM 和证书信任状态。插件更新或 iCloud 同步后，若请求记录只有 `域名:443` 的 TCP 连接、没有完整页面 URL，可重新连接 Loon 后再刷新页面。
 - **登录会话过期**：在原域名重新登录，再刷新上表对应页面。
 - **链接无法下载**：确认设备能够访问 `raw.githubusercontent.com`；无法快捷唤起时，使用上面的 `.lpx` 地址手动添加。
 
