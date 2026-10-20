@@ -91,8 +91,44 @@ test('plugin captures only exact HTTPS attendance POST responses and uses typed 
   ]) assert.equal(matcher.test(url), false, url);
   assert.match(plugin, /random = switch,false,type=boolean/);
   assert.match(plugin, /useCache = switch,true,type=boolean/);
-  assert.match(plugin, /cron "30 9 \* \* \*".*\{\$\{random\}, \$\{useCache\}\}/);
+  assert.match(plugin, /cronExpression = input,"30 9 \* \* \*",type=string/);
+  assert.match(plugin, /cron \$\{cronExpression\}.*\{\$\{random\}, \$\{useCache\}\}/);
   assert.match(plugin, /hostname = www\.nodeseek\.com\s*$/);
+});
+
+test('the remote plugin owns capture and schedule controls, with automatic check-in initially disabled', () => {
+  const declarations = new Map();
+  let section = '';
+  for (const line of plugin.split('\n')) {
+    const header = line.match(/^\[([^\]]+)\]$/);
+    if (header) { section = header[1]; continue; }
+    if (section !== 'Argument') continue;
+    const declaration = line.match(/^(\w+) = (switch|input),([^,]+),type=(boolean|string),/);
+    if (declaration) declarations.set(declaration[1], { control: declaration[2], initial: declaration[3], type: declaration[4] });
+  }
+  assert.deepEqual([...declarations.keys()], ['capture', 'autoCheckin', 'cronExpression', 'random', 'useCache']);
+  assert.deepEqual(declarations.get('capture'), { control: 'switch', initial: 'true', type: 'boolean' });
+  assert.deepEqual(declarations.get('autoCheckin'), { control: 'switch', initial: 'false', type: 'boolean' });
+  assert.deepEqual(declarations.get('cronExpression'), { control: 'input', initial: '"30 9 * * *"', type: 'string' });
+  const rules = plugin.split('\n').filter(line => /^(?:response if|cron )/.test(line));
+  assert.equal(rules.length, 2);
+  assert.match(rules[0], /enable=\$\{capture\}$/);
+  assert.match(rules[1], /^cron \$\{cronExpression\} /);
+  assert.match(rules[1], /enable=\$\{autoCheckin\}$/);
+  for (const match of plugin.matchAll(/\$\{(capture|autoCheckin|cronExpression|random|useCache)\}/g)) {
+    assert.ok(declarations.has(match[1]), `undeclared plugin argument ${match[1]}`);
+  }
+});
+
+test('plugin references only repository-hosted scripts and keeps its hostname scope inside the plugin', () => {
+  const paths = [...plugin.matchAll(/script\("([^"]+)"/g)].map(match => match[1]);
+  assert.deepEqual(paths, [
+    'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
+    'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
+  ]);
+  assert.deepEqual([...plugin.matchAll(/^\[([^\]]+)\]$/gm)].map(match => match[1]), ['Argument', 'Script', 'MITM']);
+  assert.equal((plugin.match(/^hostname = .+$/gm) || []).length, 1);
+  assert.doesNotMatch(plugin, /file:\/\/|\/Users\/|localhost|127\.0\.0\.1|ca-p12|ca-passphrase/);
 });
 
 test('manual success saves only local Cookie, User-Agent and confirmed receipt without any request', async () => {

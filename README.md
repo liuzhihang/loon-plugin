@@ -12,11 +12,11 @@
 | --- | --- | --- | --- |
 | [GLaDOS 自动签到](scripts/glados/README.md) | 每天 07:10 | [安装 GLaDOS](https://www.nsloon.com/openloon/import?plugin=https%3A%2F%2Fraw.githubusercontent.com%2Fliuzhihang%2Floon-plugin%2Fmain%2Fplugins%2Fglados.lpx) | [插件直链](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/glados.lpx) |
 | [V2EX 每日签到](scripts/v2ex/README.md) | 每天 09:10 | [安装 V2EX](https://www.nsloon.com/openloon/import?plugin=https%3A%2F%2Fraw.githubusercontent.com%2Fliuzhihang%2Floon-plugin%2Fmain%2Fplugins%2Fv2ex.lpx) | [插件直链](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/v2ex.lpx) |
-| [NodeSeek 自动签到](scripts/nodeseek/README.md) | 每天 09:30 | [安装 NodeSeek](https://www.nsloon.com/openloon/import?plugin=https%3A%2F%2Fraw.githubusercontent.com%2Fliuzhihang%2Floon-plugin%2Fmain%2Fplugins%2Fnodeseek.lpx) | [插件直链](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.lpx) |
+| [NodeSeek 自动签到](scripts/nodeseek/README.md) | 每天 09:30（需在插件参数开启） | [安装 NodeSeek](https://www.nsloon.com/openloon/import?plugin=https%3A%2F%2Fraw.githubusercontent.com%2Fliuzhihang%2Floon-plugin%2Fmain%2Fplugins%2Fnodeseek.lpx) | [插件直链](https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.lpx) |
 
 GLaDOS 支持多域名、多账号签到及积分查询，积分达到 500 时会自动兑换 `plan500`。V2EX 为单账号签到，支持 `edge.v2ex.com`、`www.v2ex.com` 和 `v2ex.com` 的登录会话。
 
-NodeSeek 为独立实现的单账号插件，在用户手动签到的已确认响应中保存本地 Cookie 与 User-Agent，支持固定或随机奖励。目前仅完成离线验证，未进行 Loon 实机或真实账号验收。
+NodeSeek 为独立实现的单账号远程插件，在用户手动签到的已确认响应中保存本地 Cookie 与 User-Agent，支持固定或随机奖励。安装 `.lpx` 后通过插件参数管理捕获、执行时间和自动签到；自动签到默认关闭，保存会话后再开启。目前仅完成离线验证，未进行 Loon 实机或真实账号验收。
 
 快捷安装使用 [Loon 官方 Scheme 文档](https://nsloon.app/docs/Scheme/)提供的 HTTPS 导入入口。若 GitHub App、微信等内置浏览器未唤起 Loon，请改用 Safari；也可以复制下面的地址手动添加。
 
@@ -44,11 +44,13 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 
 插件会引用本仓库的 JS 脚本，无需手动复制脚本或替换整份 Loon 配置。
 
+通过主配置管理 NodeSeek 时，仅在 `[Plugin]` 引用 `.lpx`；捕获规则、Cron 和 MitM 主机声明由插件管理，详细入口见 [NodeSeek 主配置接入](scripts/nodeseek/README.md#主配置接入)。远程地址在对应文件发布到 `main` 后可用，仅本地提交不会更新下载链接。
+
 ## 首次使用
 
 1. 启用插件、脚本和 MitM，完成 Loon 的 MitM 证书安装与系统信任，并保持 Loon 连接。
 2. 在受 Loon 接管的 Safari 中登录对应网站，按下表完成会话捕获操作。
-3. 收到保存通知后，可手动运行插件中的 `GLaDOS签到`、`V2EX签到` 或 `NodeSeek签到` 任务，核对日志与通知；之后按默认时间自动运行。NodeSeek 同日通常只显示本地跳过，不代表重新请求了服务端。
+3. 收到保存通知后，可手动运行插件中的 `GLaDOS签到` 或 `V2EX签到` 任务，核对日志与通知。NodeSeek 需在插件参数中开启“自动签到”，之后才按设定时间运行；同日通常只显示本地跳过，不代表重新请求了服务端。
 
 | 插件 | 登录后需要执行的操作 | 首次保存成功提示 |
 | --- | --- | --- |
@@ -58,13 +60,13 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 
 GLaDOS 仅在访问或刷新 `/console/account` 时抓取 Cookie，普通浏览和 `/api/user/status` 请求不会触发抓取通知。同一域名下按邮箱区分账号，同账号重新登录并抓取会更新旧 Cookie。V2EX 使用最后一次成功保存的会话，始终向该会话的原域名发送签到请求；Passkey 仅用于浏览器登录，脚本不读取或保存 Passkey。
 
-NodeSeek 仅向 `www.nodeseek.com` 发送一次签到 POST，不跟随重定向或自动重试，挑战、限流和未知响应时停止。奖励模式与同日跳过可在插件参数中设置；本地去重日界按 UTC+8，具体限制见其说明。
+NodeSeek 每次执行签到仅向 `www.nodeseek.com` 发送一次 POST，不跟随重定向或自动重试，挑战、限流和未知响应时停止。捕获、自动签到、执行时间、奖励模式与同日跳过均可在插件参数中设置；本地去重日界按 UTC+8，具体限制见其说明。
 
 详细说明：[GLaDOS](scripts/glados/README.md) · [V2EX](scripts/v2ex/README.md) · [NodeSeek](scripts/nodeseek/README.md) · [Loon 插件手册](https://nsloon.app/docs/Plugin/)
 
 ## 更新与排查
 
-- **更新版本**：在 Loon 中更新远程插件及其引用的远程 JS 脚本。当前功能版本为 GLaDOS `v1.4.4`、V2EX `v1.3.1`、NodeSeek `v1.0.0`，以执行日志中的 `Version` 为准；账号数据无需为升级而清空。
+- **更新版本**：在 Loon 中更新远程插件及其引用的远程 JS 脚本。当前功能版本为 GLaDOS `v1.4.4`、V2EX `v1.3.1`、NodeSeek `v1.0.1`，以执行日志中的 `Version` 为准；账号数据无需为升级而清空。
 - **没有抓取通知**：GLaDOS 的相同 Cookie 会静默跳过，可在抓取日志中确认“Cookie 未变化，跳过抓取”。需要更新会话时，确认已登录并刷新 `/console/account`；仅在站内切换页面可能不会发起该页面请求。首次抓取仍无通知时，检查插件、脚本、MitM 和证书信任状态。插件更新或 iCloud 同步后，若请求记录只有 `域名:443` 的 TCP 连接、没有完整页面 URL，可重新连接 Loon 后再刷新页面。
 - **登录会话过期**：在原域名重新登录，再按上表操作；NodeSeek 需要手动签到的已确认响应，刷新页面不会保存。
 - **链接无法下载**：确认设备能够访问 `raw.githubusercontent.com`；无法快捷唤起时，使用上面的 `.lpx` 地址手动添加。

@@ -1,6 +1,6 @@
 /*
  * NodeSeek 自动签到 — 独立的 Loon 实现
- * Version: v1.0.0 | Updated: 2026-10-20
+ * Version: v1.0.1 | Updated: 2026-10-21
  * Author / Maintainer: liuzhihang
  * https://github.com/liuzhihang/loon-plugin
  * SPDX-License-Identifier: MIT
@@ -11,7 +11,7 @@
  * 公开接口及许可研究见 README.md 与仓库 UPSTREAM.md，未复制第三方实现。
  */
 
-var SCRIPT_VERSION = "v1.0.0";
+var SCRIPT_VERSION = "v1.0.1";
 var SESSION_KEY = "NodeSeek_Session";
 var ORIGIN = "https://www.nodeseek.com";
 var ATTENDANCE_URL = /^https:\/\/www\.nodeseek\.com\/api\/attendance\?random=(?:true|false)$/;
