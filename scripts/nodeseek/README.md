@@ -12,13 +12,15 @@
    https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.lpx
    ```
 
-2. 按自己的设备设置启用插件、脚本和 MitM，安装并信任 Loon 的 MitM 证书，保持 Loon 接管 Safari 流量。在插件参数中，“捕获登录会话”默认开启，“自动签到”默认关闭。
-3. 在 Safari 登录 [NodeSeek](https://www.nodeseek.com/board)，由自己在官网手动签到一次。仅在该 POST 响应为 HTTP 200，且明确签到成功或已完成签到时，才保存请求中的 Cookie 和 User-Agent。收到“登录会话已更新”通知后，会话才已保存。普通浏览、刷新 `/board` 或仅有 Cookie 不会保存会话；捕获脚本不会补发签到请求，也不修改网页响应。
+2. 按自己的设备设置启用插件、脚本和 MitM，安装并信任 Loon 的 MitM 证书，保持 Loon 接管所用浏览器的流量。在插件参数中，“捕获登录会话”默认开启，“自动签到”默认关闭。
+3. 在受该设备 Loon 接管的浏览器登录 NodeSeek，再进入或刷新 [签到页 `/board`](https://www.nodeseek.com/board)，**不需要点击签到按钮**。页面响应为 HTTP 200、有效 HTML，且初始数据中存在有效的已登录用户时，才保存请求中的 Cookie 和 User-Agent。收到“登录会话已更新”通知后，会话才已保存。捕获不发送网络请求、不修改网页响应，也不新增“今日已签到”记录；其他页面和未登录页面不会保存。
 4. 在该插件的参数页面开启“自动签到”，并设置奖励模式与执行时间。默认计划为每天设备本地时间 **09:30**；需要先开启自动签到才会按此计划执行。保存会话后可关闭“捕获登录会话”，需要更新会话时再开启。
 
 同日若有可信日期的确认记录，运行签到任务会显示“本地记录：今日已有确认结果”，并注明“本次未请求服务器”；这不能用来验收自动签到接口。没有当日记录则向服务端提交一次 POST。只有实际出现“签到成功”或“服务端：今日已签到”，才分别表示服务端确认了新签到或重复签到。自动签到开关控制定时调度，使用者主动手动执行脚本仍可能提交签到请求。
 
-首次启用后的真实运行由使用者自行核实。遇到登录过期，重新登录并手动签到更新会话；遇到访问拒绝、安全验证或限流，先暂停定时任务，在官网核实，不连续运行。
+兼容观察用户主动发出的签到 POST：只有响应明确成功或已完成签到时，才同时保存会话与可信日期的确认记录。进入页面本身不会触发此 POST。
+
+首次启用后的真实运行由使用者自行核实。遇到登录过期，重新登录并刷新 `/board` 更新会话；遇到访问拒绝、安全验证或限流，先暂停定时任务，在官网核实，不连续运行。
 
 ## 主配置接入
 
@@ -26,7 +28,7 @@
 
 ```ini
 [Plugin]
-https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.lpx,tag=NodeSeek,enable=true
+https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.lpx,tag=NodeSeek,enabled=true
 ```
 
 捕获规则、定时任务和 `www.nodeseek.com` 的 MitM 主机声明均由 `.lpx` 插件管理；JS 由 Loon 从插件中的远程地址加载。主配置只需引用插件，执行时间和开关在插件参数中调整。
@@ -41,7 +43,7 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 
 | 设置 | 默认值 | 行为 |
 | --- | --- | --- |
-| 捕获登录会话 `capture` | 开启（`true`） | 只观察用户手动签到的已确认响应；保存成功后可关闭 |
+| 捕获登录会话 `capture` | 开启（`true`） | 进入或刷新已登录的 `/board` 即可保存会话，无需先签到；保存成功后可关闭 |
 | 自动签到 `autoCheckin` | 关闭（`false`） | 保存会话后由使用者开启，控制该插件的定时签到任务 |
 | 执行时间 `cronExpression` | `30 9 * * *` | 设备本地时间，每天 09:30；可在插件参数中调整 |
 | 随机奖励 `random` | 关闭（`false`） | 关闭发送 `random=false`，开启发送 `random=true`。该值是奖励模式，不是随机字符串或防缓存参数 |
@@ -58,11 +60,12 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 
 本地日界固定使用 **UTC+8**，不依赖设备时区；定时任务时间使用设备本地时区。站点实际日界尚未实测，本地记录只是减少重复请求的策略。如需由服务端确认，先自行核实网站状态，再关闭“同日跳过”手动运行一次。该记录不是跨脚本实例的互斥锁，请只配置一份定时任务。
 
-捕获响应只有在 HTTP `Date` 可解析、不是未来时间且距设备当前时间不超过 5 分钟时，才按该响应时间建立记录；否则只保存已验证会话，不猜测签到日期。请保持设备时间准确。自动 POST 使用请求开始时的日期，跨午夜返回时不会把结果直接记入次日，也不会覆盖同一会话较新的次日确认记录。
+页面捕获不根据页面上的“已签到”文案建立记录；同一 Cookie 与 User-Agent 已有的非未来确认记录可保留，切换会话时不继承旧记录。手动签到 POST 的捕获响应只有在 HTTP `Date` 可解析、不是未来时间且距设备当前时间不超过 5 分钟时，才按该响应时间建立记录；否则只保存已验证会话，不猜测签到日期。请保持设备时间准确。自动 POST 使用请求开始时的日期，跨午夜返回时不会把结果直接记入次日，也不会覆盖同一会话较新的次日确认记录。
 
 ## 接口与停止条件
 
 - 单次 `POST https://www.nodeseek.com/api/attendance?random=false` 或 `random=true`，请求体为 JSON `{}`，复用已保存的 Cookie 和浏览器 User-Agent，发送同站 Origin 与 Referer。
+- 页面捕获仅匹配 `GET https://www.nodeseek.com/board`，兼容末尾斜杠及查询参数。只解析 `temp-script` 内的 Base64 JSON，检查 `user.member_id` 为有效正整数；不执行页面代码、不保存用户资料。页面数据格式变化时停止保存并保留旧会话。正常页面引用 Cloudflare 检测脚本本身不判为挑战；挑战标头、验证页标题和交互验证信号仍会停止捕获。
 - 只接收 HTTP 200 的 JSON 对象；`"true"`、`1`、仅有奖励文案或未知字段都不当作 `success === true`。重复签到采用独立判断，不能凭文案中出现“鸡腿”就当作成功。
 - HTTP 401、JSON `status: 404`（公开签到脚本的失效判据）或明确未登录提示要求重新登录；HTTP 404 按接口异常处理。HTTP 403、429、安全挑战和自动化拒绝会提示暂停核实。Cloudflare 挑战（包括 HTTP 200 挑战页）不会尝试解决。
 - 请求超时为 15000 毫秒，脚本总超时为 30 秒。不自动重试任何签到请求，不跟随任何重定向，不关闭 TLS 证书校验，不使用自动 Cookie 容器。超时可能发生在服务器处理后，因此只报告结果不确定，需在官网核实。
@@ -75,9 +78,11 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 
 日志和通知只使用预设的错误分类与校验过的奖励数字，不输出 Cookie、User-Agent、响应正文、服务端原始消息或网络异常文本。存储的会话属于敏感数据，请勿把本地存储或抓包请求头加入仓库或反馈截图。清除会话时只删除 `NodeSeek_Session`；无需清空其他插件数据。
 
-没有捕获通知时，先检查插件参数“捕获登录会话”已开启，再确认是否在 Safari 手动发出了 `POST /api/attendance?random=true|false`，且响应明确成功或已签到。插件规则严格匹配 POST；脚本兼容 Loon 回调省略 `method` 字段的情况，但仍须验证响应。相同会话、相同当日结果会静默跳过保存。登录页、错误页、挑战页、失败响应、缺少 User-Agent 或存储失败都会保留原会话。接口路径、重复签到文案或站点验证方式变化时可能需要更新脚本。
+没有捕获通知时，先确认远程插件及 JS 都已更新至 `v1.1.0`，插件与“捕获登录会话”均已开启，再在已登录的浏览器刷新 `/board`，不要仅切回已经打开的标签页。规则需要实际的 HTTP 200 页面响应；缓存未重新请求或仅返回 304 时不会保存。相同会话会静默跳过，可在 `NodeSeek抓包` 日志查看“登录会话未变化”。登录页、错误页、挑战页、缺少 User-Agent 或存储失败都会保留原会话。
 
-没有按计划执行时，检查插件参数“自动签到”是否开启，以及“执行时间”是否为有效 Cron 表达式。插件更新后同时更新其引用的远程 JS，执行日志中的当前版本为 `v1.0.1`。
+Mac Chrome 也可用于捕获，前提是该浏览器流量实际经过 Mac 上的 Loon，并已有有效的脚本、MitM 和证书信任设置。手机镜像中的浏览器仍在手机运行，应在实际运行任务的同一设备完成捕获；不能仅凭配置文件同步推断会话也已同步。需要排查时只查看脚本的预设状态日志，不导出 Cookie 或完整网络请求。
+
+没有按计划执行时，检查插件参数“自动签到”是否开启，以及“执行时间”是否为有效 Cron 表达式。插件更新后同时更新其引用的远程 JS，执行日志中的当前版本为 `v1.1.0`。
 
 ## 公开来源与许可
 
@@ -85,9 +90,11 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 
 | 来源 | 研究内容 | 许可与使用范围 |
 | --- | --- | --- |
-| [NodeSeek Pro v1.0.8](https://greasyfork.org/zh-CN/scripts/567109-nodeseek-pro/code) | POST 路径、布尔奖励参数、`success` / `gain` / `current` / `message` 字段；浏览器 `credentials: include` | 源码声明 GPL-3.0；未复制其实现。其在判断成功前写入当日日期的逻辑未采用 |
+| [NodeSeek Pro v1.0.8](https://greasyfork.org/zh-CN/scripts/567109-nodeseek-pro/code) | POST 路径、布尔奖励参数、`success` / `gain` / `current` / `message` 字段；浏览器 `credentials: include`；`temp-script` 的 Base64 JSON 和 `__config__.user.member_id` 页面结构 | 源码声明 GPL-3.0；未复制其实现。其在判断成功前写入当日日期的逻辑未采用 |
 | [dragonff/NodeSeek](https://github.com/dragonff/NodeSeek/tree/39091eb5aab0a83439e8abd8f94456e503fa9ac3) | [Python](https://github.com/dragonff/NodeSeek/blob/39091eb5aab0a83439e8abd8f94456e503fa9ac3/nodeseek_sign.py) 的 JSON `{}` 请求体和“已完成签到”语义；与 Worker 参数进行对比 | 该基线根目录未提供许可证，README 的徽章链接到另一仓库，不视为本仓库授权；未复制代码。未采用 Worker 的随机字符串参数、验证码服务、登录或请求伪装机制 |
 | [Loon 插件文档](https://nsloon.app/docs/Plugin/)、[Script API](https://nsloon.app/docs/Script/script_api/) | 新版脚本入口、布尔参数绑定、`$argument` 对象和空参数、毫秒请求超时、Cookie 与重定向开关 | 仅参考配置与 API 说明 |
+
+2026-10-21 在 Chrome `/board` 页面进行只读结构核对：初始化脚本读取 Base64 JSON 后移除 `temp-script`，正常页面包含 Cloudflare 检测资源。未读取 Cookie 值、未执行签到；原始响应数据解析与 Loon 实际捕获通知尚未验收，页面捕获逻辑使用合成数据离线回归。
 
 本目录、新增 `plugins/nodeseek.lpx` 和 `tests/nodeseek.test.cjs` 的独立实现使用 [MIT 许可证](../../licenses/NodeSeek-MIT.txt)。此声明不改变 GLaDOS、V2EX 或其他上游文件的许可；完整来源边界见 [UPSTREAM.md](../../UPSTREAM.md) 与 [LICENSE.md](../../LICENSE.md)。
 

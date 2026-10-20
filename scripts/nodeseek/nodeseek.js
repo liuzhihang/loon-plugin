@@ -1,19 +1,20 @@
 /*
  * NodeSeek 自动签到 — 独立的 Loon 实现
- * Version: v1.0.1 | Updated: 2026-10-21
+ * Version: v1.1.0 | Updated: 2026-10-21
  * Author / Maintainer: liuzhihang
  * https://github.com/liuzhihang/loon-plugin
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 liuzhihang
  *
- * 仅观察用户手动签到的响应保存会话；捕获流程不发送请求。
+ * 进入已登录的签到页即可保存会话；兼容手动签到响应，捕获流程不发送请求。
  * 定时任务最多一次 POST；不重试、不跟随重定向、不处理安全挑战。
  * 公开接口及许可研究见 README.md 与仓库 UPSTREAM.md，未复制第三方实现。
  */
 
-var SCRIPT_VERSION = "v1.0.1";
+var SCRIPT_VERSION = "v1.1.0";
 var SESSION_KEY = "NodeSeek_Session";
 var ORIGIN = "https://www.nodeseek.com";
+var BOARD_URL = /^https:\/\/www\.nodeseek\.com\/board\/?(?:\?[^#]*)?$/;
 var ATTENDANCE_URL = /^https:\/\/www\.nodeseek\.com\/api\/attendance\?random=(?:true|false)$/;
 var isCapture = typeof $request !== "undefined";
 
@@ -45,11 +46,12 @@ function fail(code) {
 
 // 所有外部响应和异常只参与分类，不把原始文本写入日志或通知。
 var REASONS = {
-  session: "尚无有效本地会话；请在 Safari 登录 www.nodeseek.com 后手动签到一次以保存会话",
-  invalidSession: "本地会话格式无效；请重新登录并手动签到以更新会话",
+  session: "尚无有效本地会话；请在浏览器登录 www.nodeseek.com 后进入或刷新签到页 /board",
+  invalidSession: "本地会话格式无效；请重新登录并刷新签到页 /board 以更新会话",
   headers: "缺少有效 Cookie 或浏览器 User-Agent；原有会话保留",
   response: "缺少可验证的签到响应；原有会话保留",
-  login: "登录已过期或未登录；请在官网重新登录，再手动签到以更新会话",
+  page: "签到页缺少可验证的登录信息或格式已变化；请登录后刷新 /board，原有会话保留",
+  login: "登录已过期或未登录；请在官网重新登录，再刷新签到页 /board 以更新会话",
   challenge: "需要网页安全验证；请暂停定时任务，在官网手动核实，不反复重试或绕过验证",
   forbidden: "HTTP 403 访问被拒绝；请暂停定时任务并在官网核实账号与访问规则",
   limited: "HTTP 429 请求被限流；请暂停定时任务，稍后在官网核实",
@@ -125,17 +127,79 @@ function isDuplicate(message) {
   return /^(?:您|你)?(?:今天|今日)?(?:已经|已)完成签到\s*(?:[，,]\s*(?:请)?明天再(?:来|试)吧?)?[。.!！]?\s*$/.test(message);
 }
 
-function classify(response, body) {
+function inspectResponse(response, body, page) {
   var code = statusCode(response);
   var headers = response && response.headers;
   var text = typeof body === "string" ? body : "";
   if (/challenge/i.test(String(header(headers, "cf-mitigated"))) ||
-      /(?:<title[^>]*>\s*(?:Just a moment|Attention Required|安全验证|人机验证)|\/cdn-cgi\/challenge-platform|cf-chl-|cf-turnstile|g-recaptcha|h-captcha|checking your browser|verify you are human|captcha required)/i.test(text)) fail("challenge");
+      /(?:<title[^>]*>\s*(?:Just a moment|Attention Required|安全验证|人机验证)|\b_cf_chl_opt\b|cf-turnstile|g-recaptcha|h-captcha|checking your browser|verify you are human|captcha required)/i.test(text) ||
+      (!page && /\/cdn-cgi\/challenge-platform|cf-chl-/i.test(text))) fail("challenge");
   if (code === 401) fail("login");
   if (code === 403) fail("forbidden");
   if (code === 429) fail("limited");
   if (code >= 300 && code < 400) fail("redirect");
   if (code !== 200) fail("http");
+  return text;
+}
+
+// 只解码站点的 Base64 JSON 数据，不执行页面脚本，也不保存账号资料。
+function boardConfig(encoded) {
+  var value = encoded.replace(/\s/g, "");
+  if (!value || value.length > 512 * 1024 || value.length % 4 !== 0 ||
+      !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) fail("page");
+  var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  var buffer = 0, bits = 0, escaped = "";
+  for (var i = 0; i < value.length && value[i] !== "="; i++) {
+    buffer = (buffer << 6) | alphabet.indexOf(value[i]);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      escaped += "%" + ("0" + ((buffer >>> bits) & 255).toString(16)).slice(-2);
+    }
+  }
+  var config;
+  try { config = parseJSON(decodeURIComponent(escaped)); } catch (_) { fail("page"); }
+  if (!config || typeof config !== "object" || Array.isArray(config)) fail("page");
+  return config;
+}
+
+function verifyBoard(response, body) {
+  // 正常 HTML 也会携带 Cloudflare 检测资源路径，路径本身不等于挑战页。
+  // 仍拒绝挑战标头、验证页标题及交互验证信号，并要求已登录的初始数据。
+  var text = inspectResponse(response, body, true);
+  var contentType = header(response.headers, "Content-Type");
+  if ((contentType && !/^text\/html(?:\s*;|\s*$)/i.test(String(contentType))) ||
+      !/<(?:!doctype\s+html|html\b)/i.test(text)) fail("page");
+  // temp-script 是页面的服务端初始数据；忽略注释，不以排行榜里的用户名判定登录。
+  var scripts = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi;
+  var html = text.replace(/<!--[\s\S]*?-->/g, "");
+  var match, config = null;
+  while ((match = scripts.exec(html))) {
+    var attributes = /([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+    var attribute, id = "", idCount = 0, external = false;
+    while ((attribute = attributes.exec(match[1]))) {
+      var name = attribute[1].toLowerCase();
+      if (name === "id") {
+        idCount++;
+        id = attribute[2] !== undefined ? attribute[2] : attribute[3] !== undefined ? attribute[3] : attribute[4];
+      }
+      if (name === "src") external = true;
+    }
+    if (id !== "temp-script") continue;
+    if (external || idCount !== 1 || config !== null) fail("page");
+    config = boardConfig(match[2]);
+  }
+  if (!config) fail("page");
+  var user = config.user;
+  if (!user || typeof user !== "object" || Array.isArray(user)) fail("login");
+  var member = user.member_id;
+  if ((typeof member !== "number" && typeof member !== "string") ||
+      !/^[1-9]\d*$/.test(String(member)) || Number(member) > 9007199254740991) fail("login");
+}
+
+function classify(response, body) {
+  var text = inspectResponse(response, body);
+  var headers = response && response.headers;
 
   var contentType = header(headers, "Content-Type");
   if (contentType && !/^application\/(?:[\w.-]+\+)?json(?:\s*;|\s*$)/i.test(String(contentType))) fail("json");
@@ -166,29 +230,40 @@ function classify(response, body) {
 
 function capture() {
   // 双重约束：即使手动误调用脚本，也不读取其他页面、域名或方法的请求头。
-  // 部分 Loon 回调省略 method；此时由插件的 POST 条件约束，仍须验证响应。
-  if (!$request || ($request.method !== undefined && $request.method !== "POST") || !ATTENDANCE_URL.test($request.url || "")) return;
+  // 部分 Loon 回调省略 method；此时由插件的 GET / POST 条件约束，仍须验证响应。
+  if (!$request) return;
+  var page = BOARD_URL.test($request.url || "");
+  var attendance = ATTENDANCE_URL.test($request.url || "");
+  if ((!page && !attendance) || ($request.method !== undefined && $request.method !== (page ? "GET" : "POST"))) return;
   if (typeof $response === "undefined") fail("response");
-  var result = classify($response, $response.body);
+  var result;
+  if (page) verifyBoard($response, $response.body);
+  else result = classify($response, $response.body);
   var cookie = header($request.headers, "Cookie");
   var userAgent = header($request.headers, "User-Agent");
   if (!validHeader(cookie) || !validHeader(userAgent)) fail("headers");
 
   var session = { cookie: cookie, userAgent: userAgent };
+  var previous = readValue();
+  var oldSession = sessionFrom(previous);
+  // 打开页面不代表完成签到；仅保留同一会话已有的、非未来的服务端确认记录。
+  if (page && oldSession && oldSession.cookie === cookie && oldSession.userAgent === userAgent &&
+      oldSession.receipt && oldSession.receipt.day <= localDay()) session.receipt = oldSession.receipt;
   // 响应可能跨午夜才到达。只用近期、非未来的 HTTP Date 建立捕获记录；
   // 缺少可信日期仍保存已验证会话，但不猜测签到发生在哪一天。
   var date = header($response.headers, "Date");
   var timestamp = typeof date === "string" ? Date.parse(date) : NaN;
   var age = Date.now() - timestamp;
-  if (isFinite(age) && age >= 0 && age <= 5 * 60 * 1000) session.receipt = { day: dayAt(timestamp), kind: result.kind };
-  var previous = readValue();
+  if (!page && isFinite(age) && age >= 0 && age <= 5 * 60 * 1000) session.receipt = { day: dayAt(timestamp), kind: result.kind };
   var encoded = JSON.stringify(session);
   if (previous === encoded) {
     field("Status", "登录会话未变化，跳过保存");
     return;
   }
   if (!writeValue(encoded)) fail("storage");
-  announce("登录会话已更新", session.receipt ? "已验证手动签到响应；只在本地保存会话和当日结果记录" : "已验证并保存本地会话；缺少可信响应日期，本次不建立同日跳过记录");
+  var detail = page ? "已从已登录签到页保存本地会话；本次未发送签到请求，也不新增今日签到记录" :
+    session.receipt ? "已验证手动签到响应；只在本地保存会话和当日结果记录" : "已验证并保存本地会话；缺少可信响应日期，本次不建立同日跳过记录";
+  announce("登录会话已更新", detail);
 }
 
 function submit(session, random) {

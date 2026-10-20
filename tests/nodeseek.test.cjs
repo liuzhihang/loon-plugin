@@ -19,6 +19,12 @@ const capture = (overrides = {}) => ({
   headers: { cOoKiE: fixture.cookie, 'uSeR-aGeNt': fixture.userAgent }, ...overrides,
 });
 const response = (body = success, extras = {}) => ({ status: 200, headers: { Date: 'Tue, 20 Oct 2026 02:00:00 GMT' }, body: JSON.stringify(body), ...extras });
+const boardRequest = (overrides = {}) => capture({ url: 'https://www.nodeseek.com/board', method: 'GET', ...overrides });
+const boardHTML = (config = { user: { member_id: 123, username: 'private-page-user' } }) =>
+  '<!DOCTYPE html><html><head><title>今日签到鸡腿排行榜</title></head><body>' +
+  '<p>今日还未签到</p><script id="temp-script" type="text/plain">' +
+  Buffer.from(JSON.stringify(config)).toString('base64') + '</script></body></html>';
+const boardResponse = (extras = {}) => ({ status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', Date: 'Tue, 20 Oct 2026 02:00:00 GMT' }, body: boardHTML(), ...extras });
 
 // Only these simulated Loon APIs are exposed. No HTTP, browser, filesystem or real credentials enter the VM.
 async function run({ initial = {}, request, response: capturedResponse, reply, argument, writeOK = true,
@@ -74,8 +80,8 @@ async function run({ initial = {}, request, response: capturedResponse, reply, a
 const receiptOf = r => JSON.parse(r.store.get(key)).receipt;
 const outputOf = r => r.logs + JSON.stringify(r.notifications);
 
-test('plugin captures only exact HTTPS attendance POST responses and uses typed reward settings', () => {
-  const rule = plugin.split('\n').find(line => line.startsWith('response if '));
+test('plugin retains exact HTTPS attendance POST confirmation and typed reward settings', () => {
+  const rule = plugin.split('\n').find(line => line.startsWith('response if ') && line.includes('"POST"'));
   assert.match(rule, /\$\{request\.method\} == "POST"/);
   assert.match(rule, /\$\{response\.status\} == 200/);
   assert.match(rule, /requires_body=true/);
@@ -96,6 +102,24 @@ test('plugin captures only exact HTTPS attendance POST responses and uses typed 
   assert.match(plugin, /hostname = www\.nodeseek\.com\s*$/);
 });
 
+test('plugin captures the exact GET board page, including a trailing slash or query, without broadening the hostname', () => {
+  const rule = plugin.split('\n').find(line => line.startsWith('response if ') && line.includes('"GET"'));
+  assert.match(rule, /\$\{response\.status\} == 200/);
+  assert.match(rule, /requires_body=true/);
+  const literal = rule.match(/\$\{url\} ~= (\/.+\/) && \$\{request\.method\}/)?.[1];
+  assert.ok(literal);
+  const matcher = new RegExp(literal.slice(1, -1));
+  for (const suffix of ['/board', '/board/', '/board?refresh=1', '/board/?x=1&y=2']) {
+    assert.equal(matcher.test('https://www.nodeseek.com' + suffix), true);
+  }
+  for (const url of ['https://nodeseek.com/board', 'http://www.nodeseek.com/board',
+    'https://www.nodeseek.com.evil.test/board', 'https://www.nodeseek.com:443/board',
+    'https://www.nodeseek.com/board/extra', 'https://www.nodeseek.com/boardevil',
+    'https://www.nodeseek.com/board#fragment', 'https://www.nodeseek.com/login', 'https://www.nodeseek.com/']) {
+    assert.equal(matcher.test(url), false, url);
+  }
+});
+
 test('the remote plugin owns capture and schedule controls, with automatic check-in initially disabled', () => {
   const declarations = new Map();
   let section = '';
@@ -111,10 +135,11 @@ test('the remote plugin owns capture and schedule controls, with automatic check
   assert.deepEqual(declarations.get('autoCheckin'), { control: 'switch', initial: 'false', type: 'boolean' });
   assert.deepEqual(declarations.get('cronExpression'), { control: 'input', initial: '"30 9 * * *"', type: 'string' });
   const rules = plugin.split('\n').filter(line => /^(?:response if|cron )/.test(line));
-  assert.equal(rules.length, 2);
+  assert.equal(rules.length, 3);
   assert.match(rules[0], /enable=\$\{capture\}$/);
-  assert.match(rules[1], /^cron \$\{cronExpression\} /);
-  assert.match(rules[1], /enable=\$\{autoCheckin\}$/);
+  assert.match(rules[1], /enable=\$\{capture\}$/);
+  assert.match(rules[2], /^cron \$\{cronExpression\} /);
+  assert.match(rules[2], /enable=\$\{autoCheckin\}$/);
   for (const match of plugin.matchAll(/\$\{(capture|autoCheckin|cronExpression|random|useCache)\}/g)) {
     assert.ok(declarations.has(match[1]), `undeclared plugin argument ${match[1]}`);
   }
@@ -125,10 +150,138 @@ test('plugin references only repository-hosted scripts and keeps its hostname sc
   assert.deepEqual(paths, [
     'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
     'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
+    'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
   ]);
   assert.deepEqual([...plugin.matchAll(/^\[([^\]]+)\]$/gm)].map(match => match[1]), ['Argument', 'Script', 'MITM']);
   assert.equal((plugin.match(/^hostname = .+$/gm) || []).length, 1);
   assert.doesNotMatch(plugin, /file:\/\/|\/Users\/|localhost|127\.0\.0\.1|ca-p12|ca-passphrase/);
+});
+
+test('opening a logged-in board page saves only Cookie and User-Agent without signing in or claiming a receipt', async () => {
+  const request = boardRequest();
+  request.headers.Authorization = 'private-unused-header';
+  const r = await run({ request, response: boardResponse() });
+  assert.equal(r.calls.length, 0);
+  assert.deepEqual(JSON.parse(r.store.get(key)), fixture);
+  assert.equal(r.writes.length, 1);
+  assert.match(outputOf(r), /登录会话已更新/);
+  assert.match(outputOf(r), /未发送签到请求/);
+  assert.doesNotMatch(outputOf(r) + r.store.get(key), /private-page-user|private-unused-header|member_id/);
+  assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone/);
+});
+
+test('board capture handles UTF-8 bootstrap data and normal HTML attribute variations without executing scripts', async () => {
+  for (const html of [
+    boardHTML({ user: { member_id: '123', username: '离线用户🍗' }, note: 'private-config-text' }),
+    boardHTML().replace('id="temp-script" type="text/plain"', "type='text/plain'\nID='temp-script'"),
+    boardHTML().replace('id="temp-script"', 'id=temp-script'),
+    boardHTML().replace('</body>', '<script>throw new Error("private-executed-script")</script></body>'),
+    boardHTML().replace('</body>', '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body>'),
+  ]) {
+    const r = await run({ request: boardRequest(), response: boardResponse({ body: html }) });
+    assert.deepEqual(JSON.parse(r.store.get(key)), fixture);
+    assert.equal(r.calls.length, 0);
+    assert.doesNotMatch(outputOf(r), /private-|离线用户/);
+  }
+});
+
+test('GET board variants and a missing callback method still require a verified logged-in page', async () => {
+  for (const suffix of ['/board', '/board/', '/board?refresh=1']) {
+    const request = boardRequest({ url: 'https://www.nodeseek.com' + suffix });
+    delete request.method;
+    const r = await run({ request, response: boardResponse() });
+    assert.deepEqual(JSON.parse(r.store.get(key)), fixture);
+  }
+});
+
+test('board visits retain a confirmed receipt only for the unchanged session and never trust page sign-in wording', async () => {
+  const initial = saved({ day, kind: 'success' });
+  const same = await run({ initial, request: boardRequest(), response: boardResponse() });
+  assert.equal(same.writes.length, 0);
+  assert.equal(same.notifications.length, 0);
+  assert.deepEqual(receiptOf(same), { day, kind: 'success' });
+  for (const headers of [{ Cookie: 'session=other-offline-user', 'User-Agent': fixture.userAgent },
+    { Cookie: fixture.cookie, 'User-Agent': 'offline-other-browser' }]) {
+    const changed = await run({ initial, request: boardRequest({ headers }), response: boardResponse() });
+    assert.equal(receiptOf(changed), undefined);
+    assert.equal(changed.calls.length, 0);
+  }
+  const future = await run({ initial: saved({ day: '2099-01-01', kind: 'success' }), request: boardRequest(), response: boardResponse() });
+  assert.equal(receiptOf(future), undefined);
+  const pageSaysSigned = await run({ request: boardRequest(), response: boardResponse({ body: boardHTML().replace('今日还未签到', '今日已签到') }) });
+  assert.equal(receiptOf(pageSaysSigned), undefined);
+});
+
+test('an unchanged page session is silent, and cron after a page capture still submits exactly one POST', async () => {
+  const captured = await run({ request: boardRequest(), response: boardResponse() });
+  const initial = Object.fromEntries(captured.store);
+  const unchanged = await run({ initial, request: boardRequest(), response: boardResponse() });
+  assert.equal(unchanged.writes.length + unchanged.notifications.length + unchanged.calls.length, 0);
+  assert.match(unchanged.logs, /未变化/);
+  const cron = await run({ initial });
+  assert.equal(cron.calls.length, 1);
+  assert.equal(cron.calls[0].method, 'POST');
+  assert.deepEqual(receiptOf(cron), { day, kind: 'success' });
+});
+
+test('anonymous, malformed, challenged, redirected or unrelated pages preserve the old session without network access', async () => {
+  const bodies = [
+    boardHTML({ user: null }), boardHTML({ user: false }), boardHTML({ user: [] }),
+    boardHTML({ user: { member_id: 0 } }), boardHTML({ user: { member_id: '001' } }),
+    boardHTML({ user: { member_id: '123x' } }), boardHTML({ user: { member_id: 9007199254740992 } }),
+    boardHTML({ user: { member_id: true } }), boardHTML({ user: { member_id: { id: 123 } } }),
+    boardHTML({ users: [{ member_id: 123 }] }), boardHTML([]), boardHTML('not-a-config'),
+    '<html><body>今日还未签到 排行榜 user member_id=123</body></html>',
+    boardHTML().replace(/(<script[^>]*>)[^<]+/, '$1!!!invalid!!!'),
+    boardHTML().replace(/(<script[^>]*>)[^<]+/, '$1' + Buffer.from('{"user":').toString('base64')),
+    boardHTML().replace(/(<script[^>]*>)[^<]+/, '$1' + Buffer.from([0xff, 0xff, 0xff]).toString('base64')),
+    boardHTML().replace('<script ', '<!-- <script ').replace('</script>', '</script> -->'),
+    boardHTML().replace('id="temp-script"', 'data-id="temp-script"'),
+    boardHTML().replace('id="temp-script"', 'data-note=\' id="temp-script" \''),
+    boardHTML().replace('id="temp-script"', 'id="other" id="temp-script"'),
+    boardHTML().replace('<script ', '<script src="https://evil.test/data" '),
+    boardHTML().replace('</body>', '<script id="temp-script">' + Buffer.from('{"user":null}').toString('base64') + '</script></body>'),
+    boardHTML().replace('<title>今日签到鸡腿排行榜</title>', '<title>Just a moment...</title>'),
+    boardHTML().replace('</body>', '<script>window._cf_chl_opt = {};</script></body>'),
+    boardHTML().replace('</body>', '<div class="cf-turnstile">安全验证</div></body>'),
+  ];
+  const badResponses = bodies.map(body => boardResponse({ body }));
+  for (const status of [0, 200.5, 301, 302, 307, 401, 403, 404, 429, 500]) badResponses.push(boardResponse({ status }));
+  badResponses.push(boardResponse({ headers: { 'Content-Type': 'application/json' } }));
+  badResponses.push(boardResponse({ headers: { 'cf-mitigated': 'challenge' } }));
+  for (const capturedResponse of badResponses) {
+    const initial = saved({ day, kind: 'duplicate' });
+    const r = await run({ initial, request: boardRequest(), response: capturedResponse });
+    assert.deepEqual(Object.fromEntries(r.store), initial);
+    assert.equal(r.calls.length + r.writes.length, 0);
+    assert.match(r.logs, /会话未保存/);
+    assert.doesNotMatch(outputOf(r), /offline-session|private-page-user|evil\.test/);
+  }
+});
+
+test('board capture never reads headers or storage for another URL or an incorrect method', async () => {
+  for (const request of [boardRequest({ method: 'POST' }), boardRequest({ method: 'DELETE' }),
+    boardRequest({ url: 'https://nodeseek.com/board' }), boardRequest({ url: 'https://www.nodeseek.com/board/extra' }),
+    boardRequest({ url: 'https://www.nodeseek.com.evil.test/board' }), boardRequest({ url: 'https://www.nodeseek.com/login' })]) {
+    Object.defineProperty(request, 'headers', { get() { assert.fail('must not read unrelated headers'); } });
+    const r = await run({ request, response: boardResponse() });
+    assert.equal(r.reads.length + r.writes.length + r.calls.length + r.notifications.length, 0);
+  }
+});
+
+test('board capture requires valid headers and preserves existing data on storage failures', async () => {
+  for (const settings of [
+    { request: boardRequest({ headers: { Cookie: fixture.cookie } }) },
+    { request: boardRequest({ headers: { Cookie: 'session=unsafe\r\nX: secret', 'User-Agent': fixture.userAgent } }) },
+    { readError: true }, { writeError: true }, { writeOK: false },
+  ]) {
+    const initial = saved(undefined, { ...fixture, cookie: 'session=previous-offline-user' });
+    const r = await run({ initial, request: boardRequest(), response: boardResponse(), ...settings });
+    assert.deepEqual(Object.fromEntries(r.store), initial);
+    assert.equal(r.calls.length, 0);
+    assert.match(r.logs, /会话未保存/);
+    assert.doesNotMatch(outputOf(r), /offline-session|secret|private-page-user/);
+  }
 });
 
 test('manual success saves only local Cookie, User-Agent and confirmed receipt without any request', async () => {
