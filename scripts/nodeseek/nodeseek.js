@@ -1,17 +1,18 @@
 /*
  * NodeSeek 自动签到 — 独立的 Loon 实现
- * Version: v1.2.0 | Updated: 2026-10-21
+ * Version: v1.3.0 | Updated: 2026-10-21
  * Author / Maintainer: liuzhihang
  * https://github.com/liuzhihang/loon-plugin
  * SPDX-License-Identifier: MIT
  * Copyright (c) 2026 liuzhihang
  *
  * 进入已登录的签到页即可保存会话；兼容手动签到响应，捕获流程不发送请求。
- * 定时任务最多一次 POST；不重试、不跟随重定向、不处理安全挑战。
+ * 定时任务先只读验证登录和签到状态，明确未签到才发一次 POST。
+ * 不重试、不跟随重定向、不处理安全挑战。
  * 公开接口及许可研究见 README.md 与仓库 UPSTREAM.md，未复制第三方实现。
  */
 
-var SCRIPT_VERSION = "v1.2.0";
+var SCRIPT_VERSION = "v1.3.0";
 var SESSION_KEY = "NodeSeek_Session";
 var ORIGIN = "https://www.nodeseek.com";
 var BOARD_URL = /^https:\/\/www\.nodeseek\.com\/board\/?(?:\?[^#]*)?$/;
@@ -69,7 +70,12 @@ var REASONS = {
   network: "网络请求失败或超时；签到结果不确定，请在官网核实，本次不自动重试",
   storage: "本地存储读取或写入失败；原有会话未主动清除",
   arguments: "插件参数无效；autoCheckin、random 和 useCache 必须为布尔值，本次未读取会话、未发签到请求",
-  runtime: "脚本执行异常；请检查 Loon 脚本环境，本次不自动重试"
+  runtime: "脚本执行异常；请检查 Loon 脚本环境，本次不自动重试",
+  query: "签到状态查询失败或不明确；已停止，请在官网核实",
+  queryNetwork: "签到前查询网络失败或超时；已停止，请稍后在官网核实",
+  queryDate: "签到状态响应日期缺失、过期或跨日；已停止，请稍后核实",
+  sessionChanged: "查询期间登录会话已变化；已停止，请确认当前账号后再使用",
+  dayChanged: "查询期间已跨日；已停止，请等待下次计划执行"
 };
 
 function header(headers, name) {
@@ -123,16 +129,20 @@ function options(value) {
 
 function statusCode(response) {
   var status = response && (response.status !== undefined ? response.status : response.statusCode);
+  if (typeof status !== "number" && typeof status !== "string") return 0;
   return /^\d{3}$/.test(String(status)) ? Number(status) : 0;
 }
 
 function isDuplicate(message) {
   // 只接受完整肯定句和常见的“明天再来”后缀，含未知补充说明时不建立缓存。
-  return /^(?:您|你)?(?:今天|今日)?(?:已经|已)完成签到\s*(?:[，,]\s*(?:请)?明天再(?:来|试)吧?)?[。.!！]?\s*$/.test(message);
+  return /^(?:您|你)?(?:今天|今日)?(?:已经|已)完成签到\s*(?:[，,]\s*(?:(?:请)?明天再(?:来|试)吧?|请勿重复(?:操作|签到)))?[。.!！]?\s*$/.test(message);
 }
 
-function inspectResponse(response, body, page) {
+function inspectResponse(response, body, page, allowDuplicate500) {
   var code = statusCode(response);
+  // 仅输出校验后的数字或固定标签；绝不输出原始状态值、Header 或响应正文。
+  field("HTTP status", code || "缺失或格式异常");
+  field("Status types", "status=" + typeof (response && response.status) + ", statusCode=" + typeof (response && response.statusCode));
   var headers = response && response.headers;
   var text = typeof body === "string" ? body : "";
   if (/challenge/i.test(String(header(headers, "cf-mitigated"))) ||
@@ -142,7 +152,7 @@ function inspectResponse(response, body, page) {
   if (code === 403) fail("forbidden");
   if (code === 429) fail("limited");
   if (code >= 300 && code < 400) fail("redirect");
-  if (code !== 200) fail("http");
+  if (code !== 200 && !(allowDuplicate500 && code === 500)) fail("http");
   return text;
 }
 
@@ -199,25 +209,40 @@ function verifyBoard(response, body) {
   var member = user.member_id;
   if ((typeof member !== "number" && typeof member !== "string") ||
       !/^[1-9]\d*$/.test(String(member)) || Number(member) > 9007199254740991) fail("login");
+  return String(member);
 }
 
-function classify(response, body) {
-  var text = inspectResponse(response, body);
+function apiPayload(response, body, allowDuplicate500) {
+  var text = inspectResponse(response, body, false, allowDuplicate500);
   var headers = response && response.headers;
 
   var contentType = header(headers, "Content-Type");
   if (contentType && !/^application\/(?:[\w.-]+\+)?json(?:\s*;|\s*$)/i.test(String(contentType))) fail("json");
   var data = parseJSON(text);
   if (!data || typeof data !== "object" || Array.isArray(data)) fail("json");
+  var apiStatus = statusCode({ status: data.status });
+  field("API status", apiStatus || "缺失或格式异常");
+  field("API type", typeof data.status);
   var message = typeof data.message === "string" ? data.message.trim() : "";
   if (/验证码|人机验证|安全验证|captcha|turnstile|challenge/i.test(message)) fail("challenge");
   if (/automated|automation|bot\s+(?:detected|check)|禁止自动|拒绝自动|检测到.*自动/i.test(message)) fail("automated");
   // status: 404 是公开签到脚本使用的登录态失效信号；HTTP 404 仍按接口异常处理。
-  var apiStatus = statusCode({ status: data.status });
   if (apiStatus === 401 || apiStatus === 404 || /请先?登录|尚未登录|未登录|登录(?:已)?(?:过期|失效)|会话(?:已)?过期|not\s+(?:logged|signed)\s+in|unauthori[sz]ed|login\s+required|session\s+(?:expired|invalid)/i.test(message)) fail("login");
   if (apiStatus === 429) fail("limited");
   if (apiStatus === 403) fail("forbidden");
   if (apiStatus >= 400) fail("http");
+  return { data: data, message: message };
+}
+
+function classify(response, body) {
+  var payload = apiPayload(response, body, true);
+  var data = payload.data, message = payload.message;
+  // 站点可能以 HTTP 500 返回明确的重复签到；只放行这一种失败结构。
+  // 其他 500（包括 success:true、模糊提示、业务错误和挑战）仍不当作成功。
+  if (statusCode(response) === 500) {
+    if (data.success === false && isDuplicate(message)) return { kind: "duplicate" };
+    fail("http");
+  }
   if (/^(?:您|你)?(?:今天|今日)?(?:已经|已)完成签到/.test(message)) {
     if (typeof data.success === "boolean" && isDuplicate(message)) return { kind: "duplicate" };
     fail("unknown");
@@ -230,6 +255,70 @@ function classify(response, body) {
     if (typeof value === "number" && isFinite(value) && value >= 0 && Math.floor(value) === value) result[key] = value;
   });
   return result;
+}
+
+function attendanceState(response, body, member, day) {
+  var payload = apiPayload(response, body);
+  var data = payload.data;
+  if (payload.message || (data.status !== undefined && statusCode({ status: data.status }) !== 200) ||
+      (data.error !== undefined && data.error !== null) || (data.errors !== undefined && data.errors !== null) ||
+      (data.success !== undefined && data.success !== true) || !Array.isArray(data.list) ||
+      !Object.prototype.hasOwnProperty.call(data, "record")) fail("query");
+  // 只使用当前会话的 record，不扫描排行榜 list，也不把缺字段当未签到。
+  var date = header(response.headers, "Date");
+  var timestamp = typeof date === "string" ? Date.parse(date) : NaN;
+  var age = Date.now() - timestamp;
+  if (!isFinite(age) || age < -30000 || age > 5 * 60 * 1000 || dayAt(timestamp) !== day) fail("queryDate");
+  if (data.record === null) {
+    if (data.order !== undefined && data.order !== null) fail("query");
+    return { kind: "pending" };
+  }
+  var record = data.record;
+  if (!record || typeof record !== "object" || Array.isArray(record) ||
+      typeof record.gain !== "number" || !isFinite(record.gain) || record.gain < 0 || Math.floor(record.gain) !== record.gain) fail("query");
+  if (record.member_id !== undefined &&
+      ((typeof record.member_id !== "number" && typeof record.member_id !== "string") || String(record.member_id) !== member)) fail("query");
+  if (record.created_at !== undefined) {
+    var created = typeof record.created_at === "string" ? Date.parse(record.created_at) : NaN;
+    if (!isFinite(created) || created > timestamp + 30000 || dayAt(created) !== day) fail("query");
+  }
+  return { kind: "duplicate" };
+}
+
+function requireSameSession(session, day) {
+  if (localDay() !== day) fail("dayChanged");
+  var current = sessionFrom(readValue());
+  if (!current || current.cookie !== session.cookie || current.userAgent !== session.userAgent) fail("sessionChanged");
+}
+
+function readRemote(session, path, accept, stage) {
+  field("Stage", stage);
+  return new Promise(function (resolve, reject) {
+    try {
+      $httpClient.get({
+        url: ORIGIN + path, method: "GET", timeout: 6000,
+        headers: { Cookie: session.cookie, "User-Agent": session.userAgent, Accept: accept,
+          Referer: ORIGIN + "/board", "Cache-Control": "no-cache", Pragma: "no-cache" },
+        "auto-cookie": false, "auto-redirect": false, insecure: false
+      }, function (error, response, body) {
+        if (error) { reject({ code: "queryNetwork" }); return; }
+        resolve({ response: response, body: body });
+      });
+    } catch (_) { reject({ code: "queryNetwork" }); }
+  });
+}
+
+function queryAttendance(session, day) {
+  var member;
+  // board 的 record:null 也可能出现在匿名访问中，先以同一 Cookie 验证登录身份。
+  return readRemote(session, "/board", "text/html", "验证登录状态（GET）").then(function (reply) {
+    requireSameSession(session, day);
+    member = verifyBoard(reply.response, reply.body);
+    return readRemote(session, "/api/attendance/board?page=1", "application/json", "查询签到状态（GET）");
+  }).then(function (reply) {
+    requireSameSession(session, day);
+    return attendanceState(reply.response, reply.body, member, day);
+  });
 }
 
 function capture() {
@@ -323,8 +412,17 @@ function checkin(settings) {
     return;
   }
 
-  field("Action", "单次 POST；失败或结果不明确时不自动重试");
-  return submit(session, settings.random).then(function (result) {
+  field("Action", "先查询服务端状态；明确未签到才发送单次 POST，不自动重试");
+  return queryAttendance(session, day).then(function (state) {
+    requireSameSession(session, day);
+    if (state.kind === "duplicate") {
+      field("Preflight", "服务端确认今日已签到，跳过 POST");
+      return state;
+    }
+    field("Preflight", "服务端明确今日未签到");
+    field("Stage", "执行签到（POST）");
+    return submit(session, settings.random);
+  }).then(function (result) {
     var recorded = recordReceipt(session, day, result.kind);
     var details = [];
     if (result.kind === "success") {

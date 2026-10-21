@@ -31,14 +31,16 @@ const boardResponse = (extras = {}) => ({ status: 200, headers: { 'Content-Type'
 
 // Only these simulated Loon APIs are exposed. No HTTP, browser, filesystem or real credentials enter the VM.
 async function runRaw({ initial = {}, request, response: capturedResponse, reply, argument, script, writeOK = true,
-  readError = false, writeError = false, notifyError = false, now = '2026-10-20T02:00:00Z', onRequest } = {}) {
+  readError = false, writeError = false, notifyError = false, now = '2026-10-20T02:00:00Z', onRequest,
+  preflightReply, onReadRequest } = {}) {
   const store = new Map(Object.entries(initial));
-  const calls = [], reads = [], writes = [], logs = [], notifications = [], doneValues = [];
+  const calls = [], gets = [], traffic = [], reads = [], writes = [], logs = [], notifications = [], doneValues = [];
+  const nowMillis = () => new Date(typeof now === 'function' ? now() : now).getTime();
   let finish, done = 0;
   const completed = new Promise(resolve => { finish = resolve; });
   const sandbox = {
     $loon: 'offline Loon 3.5.1(983)',
-    Date: class extends Date { static now() { return new Date(typeof now === 'function' ? now() : now).getTime(); } },
+    Date: class extends Date { static now() { return nowMillis(); } },
     console: { log: value => logs.push(String(value)) },
     $persistentStore: {
       read(name) { reads.push(name); if (typeof readError === 'function' ? readError(name, reads.length) : readError) throw new Error('private-read-error'); return store.get(name); },
@@ -51,9 +53,23 @@ async function runRaw({ initial = {}, request, response: capturedResponse, reply
     },
     $notification: { post: (...args) => { notifications.push(args); if (notifyError) throw new Error(`private-notification-error ${fixture.cookie}`); } },
     $httpClient: {
-      get() { assert.fail('NodeSeek must never issue a GET'); },
+      get(options, callback) {
+        gets.push(options);
+        traffic.push(options.method);
+        if (onReadRequest) onReadRequest(store, options, gets);
+        const result = (preflightReply ? preflightReply(options, gets) : null) || {};
+        if (result.throw) throw new Error(result.throw);
+        const res = result.noResponse ? undefined : {
+          ...(Object.hasOwn(result, 'statusCode') ? { statusCode: result.statusCode } : { status: result.status ?? 200 }),
+          headers: result.headers || { Date: new Date(nowMillis()).toUTCString() },
+        };
+        const defaultBody = options.url.endsWith('/board') ? boardHTML() : JSON.stringify({ list: [], record: null, order: null });
+        const body = Object.hasOwn(result, 'rawBody') ? result.rawBody : Object.hasOwn(result, 'body') ? JSON.stringify(result.body) : defaultBody;
+        queueMicrotask(() => callback(result.error || null, res, body));
+      },
       post(options, callback) {
         calls.push(options);
+        traffic.push(options.method);
         if (onRequest) onRequest(store, options);
         const result = reply ? reply(options, calls) : { body: success };
         if (result.throw) throw new Error(result.throw);
@@ -78,7 +94,7 @@ async function runRaw({ initial = {}, request, response: capturedResponse, reply
   assert.notEqual(outcome, 'timeout', 'script must finish');
   assert.equal(done, 1, '$done must be called exactly once');
   assert.equal(JSON.stringify(doneValues), '[{}]', 'capture must leave request and response unchanged');
-  return { store, calls, reads, writes, logs: logs.join('\n'), notifications };
+  return { store, calls, gets, traffic, reads, writes, logs: logs.join('\n'), notifications };
 }
 
 // Ordinary fixtures model a complete plugin invocation. The regression cases below
@@ -517,6 +533,179 @@ test('cron defaults to one fixed-reward POST with the captured credentials and n
   assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone/);
 });
 
+test('check-in verifies the account and its own server state before the single POST', async () => {
+  const r = await run({ initial: saved(), preflightReply: options => options.url.includes('/api/attendance/board')
+    ? { body: { list: [{ member_id: 999, gain: 15 }], record: null, order: null } } : {} });
+  assert.deepEqual(r.traffic, ['GET', 'GET', 'POST']);
+  assert.deepEqual(r.gets.map(request => request.url), [
+    'https://www.nodeseek.com/board', 'https://www.nodeseek.com/api/attendance/board?page=1',
+  ]);
+  for (const request of r.gets) {
+    assert.equal(request.headers.Cookie, fixture.cookie);
+    assert.equal(request.headers['User-Agent'], fixture.userAgent);
+    assert.equal(request.headers['Cache-Control'], 'no-cache');
+    assert.equal(request.timeout, 6000);
+    assert.equal(request['auto-cookie'], false);
+    assert.equal(request['auto-redirect'], false);
+    assert.equal(request.insecure, false);
+    assert.equal(request.body, undefined);
+  }
+  assert.match(r.logs, /服务端明确今日未签到/);
+  assert.equal(r.notifications[0][1], '签到成功');
+});
+
+test('a server-owned attendance record skips POST and is distinct from an older local receipt', async () => {
+  for (const useCache of [true, false]) {
+    const r = await run({ initial: saved({ day: '2026-10-19', kind: 'success' }), argument: { useCache },
+      preflightReply: options => options.url.includes('/api/attendance/board')
+        ? { body: { list: [{ member_id: 999, gain: 15 }], record: { member_id: 123, gain: 0, created_at: '2026-10-20T01:00:00Z' } } } : {} });
+    assert.deepEqual(r.traffic, ['GET', 'GET']);
+    assert.deepEqual(receiptOf(r), { day, kind: 'duplicate' });
+    assert.deepEqual(r.notifications[0], ['NodeSeek', '服务端：今日已签到', '无需重复签到']);
+    assert.match(r.logs, /服务端确认今日已签到，跳过 POST/);
+    assert.doesNotMatch(outputOf(r), /获得 0 个鸡腿|offline-session|offline-iPhone/);
+  }
+});
+
+test('unknown, contradictory or another account\'s status never authorizes a POST', async () => {
+  for (const body of [
+    {}, { list: [{ member_id: 123, gain: 5 }] }, { list: [], record: false },
+    { list: [], record: [] }, { list: [], record: {} }, { list: [], record: null, success: false },
+    { list: [], record: null, message: 'private-unknown-message' },
+    { list: [], record: null, error: 'private-unknown-error' },
+    { list: [], record: null, errors: ['private-unknown-error'] },
+    { list: [], record: null, status: 'private-unknown-status' },
+    { record: null }, { list: [], record: null, order: 123 },
+    { list: [], record: { gain: '5' } }, { list: [], record: { gain: -1 } },
+    { list: [], record: { gain: 5, member_id: 999 } },
+    { list: [], record: { gain: 5, member_id: [123] } },
+    { list: [], record: { gain: 5, created_at: '2026-10-19T01:00:00Z' } },
+    { list: [], record: { gain: 5, created_at: '2026-10-20T03:00:00Z' } },
+  ]) {
+    const initial = saved();
+    const r = await run({ initial, preflightReply: options => options.url.includes('/api/attendance/board') ? { body } : {} });
+    assert.deepEqual(r.traffic, ['GET', 'GET']);
+    assert.equal(r.writes.length, 0);
+    assert.deepEqual(Object.fromEntries(r.store), initial);
+    assert.match(r.logs, /签到状态查询失败或不明确/);
+    assert.doesNotMatch(outputOf(r), /private-unknown/);
+  }
+});
+
+test('failed, anonymous, challenged and redirected preflight reads stop without a POST or retries', async () => {
+  for (const stage of [1, 2]) {
+    for (const failure of [
+      { error: `private-network-error ${fixture.cookie}` }, { throw: 'private-client-error' },
+      { status: 401 }, { status: 403 }, { status: 429 }, { status: 500 }, { status: 302 }, { noResponse: true },
+      { rawBody: '<html><title>Just a moment...</title></html>' },
+      { rawBody: 'private-response' }, { body: { success: false, status: 404 } },
+      { headers: { 'cf-mitigated': 'challenge' } },
+      { rawBody: boardHTML({ user: null }) },
+    ]) {
+      const initial = saved();
+      const r = await run({ initial, preflightReply: (_options, gets) => gets.length === stage ? failure : {} });
+      assert.equal(r.gets.length, stage);
+      assert.equal(r.calls.length + r.writes.length, 0);
+      assert.deepEqual(Object.fromEntries(r.store), initial);
+      assert.equal(r.notifications[0][1], '签到未完成');
+      assert.doesNotMatch(outputOf(r), /private-|offline-session|offline-clearance|签到成功/);
+    }
+  }
+});
+
+test('missing, stale, future or previous-day server dates cannot authorize a POST', async () => {
+  for (const Date of [undefined, 'invalid-private-date', 'Tue, 20 Oct 2026 01:00:00 GMT',
+    'Tue, 20 Oct 2026 03:00:00 GMT', 'Mon, 19 Oct 2026 15:59:59 GMT']) {
+    const r = await run({ initial: saved(), preflightReply: options => options.url.includes('/api/attendance/board')
+      ? { headers: Date ? { Date } : {} } : {} });
+    assert.deepEqual(r.traffic, ['GET', 'GET']);
+    assert.equal(r.writes.length, 0);
+    assert.match(r.logs, /签到状态响应日期缺失、过期或跨日/);
+    assert.doesNotMatch(outputOf(r), /invalid-private-date/);
+  }
+});
+
+test('a session switch during either preflight GET cannot sign the old account or overwrite the new one', async () => {
+  for (const stage of [1, 2]) {
+    for (const session of [{ ...fixture, cookie: 'session=other-offline-account' }, { ...fixture, userAgent: 'other-offline-UA' }]) {
+      const newer = saved({ day, kind: 'duplicate' }, session);
+      const r = await run({ initial: saved(), onReadRequest: (store, _options, gets) => {
+        if (gets.length === stage) store.set(key, newer[key]);
+      } });
+      assert.equal(r.gets.length, stage);
+      assert.equal(r.calls.length + r.writes.length, 0);
+      assert.deepEqual(Object.fromEntries(r.store), newer);
+      assert.match(r.logs, /查询期间登录会话已变化/);
+      assert.doesNotMatch(outputOf(r), /other-offline/);
+    }
+  }
+});
+
+test('crossing midnight during either preflight GET stops without POST or a next-day receipt', async () => {
+  for (const stage of [1, 2]) {
+    let now = '2026-10-20T15:59:59Z';
+    const initial = saved();
+    const r = await run({ initial, now: () => now, onReadRequest: (_store, _options, gets) => {
+      if (gets.length === stage) now = '2026-10-20T16:00:01Z';
+    } });
+    assert.equal(r.gets.length, stage);
+    assert.equal(r.calls.length + r.writes.length, 0);
+    assert.deepEqual(Object.fromEntries(r.store), initial);
+    assert.match(r.logs, /查询期间已跨日/);
+  }
+});
+
+test('numeric and numeric-string status/statusCode work on GET and POST with safe type diagnostics', async () => {
+  for (const fields of [{ status: 200 }, { status: '200' }, { statusCode: 200 }, { statusCode: '200' }]) {
+    const r = await run({ initial: saved(), preflightReply: () => fields, reply: () => ({ ...fields, body: success }) });
+    assert.deepEqual(r.traffic, ['GET', 'GET', 'POST']);
+    assert.equal(r.notifications[0][1], '签到成功');
+    assert.match(r.logs, /HTTP status\s*: 200/);
+    assert.match(r.logs, /Status types\s*: status=(?:number|string|undefined), statusCode=(?:number|string|undefined)/);
+    assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone/);
+  }
+});
+
+test('HTTP and API status diagnostics distinguish identical old HTTP errors without printing raw values', async () => {
+  for (const [reply, expected] of [
+    [{ status: 500, body: success }, /HTTP status\s*: 500/],
+    [{ body: { success: true, status: 500 } }, /HTTP status\s*: 200[\s\S]*API status\s*: 500/],
+    [{ noResponse: true, body: success }, /HTTP status\s*: 缺失或格式异常/],
+    [{ status: 'HTTP/1.1 200 private-secret', body: success }, /HTTP status\s*: 缺失或格式异常/],
+    [{ status: ['200'], body: success }, /HTTP status\s*: 缺失或格式异常/],
+  ]) {
+    const r = await run({ initial: saved(), reply: () => reply });
+    assert.equal(r.calls.length, 1);
+    assert.equal(r.writes.length, 0);
+    assert.match(r.logs, expected);
+    assert.equal(r.notifications[0][1], '签到未完成');
+    assert.doesNotMatch(outputOf(r), /private-secret|HTTP\/1\.1|offline-session/);
+  }
+});
+
+test('only explicit success-false duplicates on HTTP 500 are recognized without retrying', async () => {
+  for (const message of ['今天已完成签到，请勿重复操作', '今日已完成签到，请勿重复签到', '今天已完成签到，明天再来吧']) {
+    const r = await run({ initial: saved(), reply: () => ({ status: 500, body: { success: false, message } }) });
+    assert.deepEqual(r.traffic, ['GET', 'GET', 'POST']);
+    assert.deepEqual(receiptOf(r), { day, kind: 'duplicate' });
+    assert.equal(r.notifications[0][1], '服务端：今日已签到');
+    assert.match(r.logs, /HTTP status\s*: 500/);
+    assert.doesNotMatch(outputOf(r), /获得|成功1/);
+  }
+  for (const body of [
+    { success: true, message: '今天已完成签到，请勿重复操作' },
+    { success: false, message: '今天已完成签到，但是结果异常' },
+    { success: false, message: '今天已完成签到，请勿重复操作', status: 500 },
+    { success: false, message: '请先登录，今天已完成签到' },
+    { success: false, message: '今天已完成签到，captcha required' },
+  ]) {
+    const r = await run({ initial: saved(), reply: () => ({ status: 500, body }) });
+    assert.equal(r.calls.length, 1);
+    assert.equal(r.writes.length, 0);
+    assert.equal(r.notifications[0][1], '签到未完成');
+  }
+});
+
 test('typed true and complete JSON argument objects select random rewards without nonce parameters', async () => {
   for (const argument of [{ random: true }, JSON.stringify({ ...checkinArgument, random: true })]) {
     const r = await run({ initial: saved(), argument });
@@ -546,6 +735,7 @@ test('same-day cache is distinct from a server duplicate and makes no network re
     const initial = saved({ day, kind });
     const r = await run({ initial });
     assert.equal(r.calls.length, 0);
+    assert.equal(r.gets.length, 0);
     assert.equal(r.writes.length, 0);
     assert.deepEqual(Object.fromEntries(r.store), initial);
     assert.match(r.logs, /成功0 服务端重复0 本地跳过1 失败0/);
@@ -801,7 +991,8 @@ test('failed persistence after a confirmed result preserves the server outcome a
 
 test('a storage read failure after confirmation does not change the known server outcome', async () => {
   const initial = saved();
-  const r = await run({ initial, readError: (_name, count) => count > 1 });
+  let submitted = false;
+  const r = await run({ initial, onRequest: () => { submitted = true; }, readError: () => submitted });
   assert.equal(r.calls.length, 1);
   assert.equal(r.writes.length, 0);
   assert.deepEqual(Object.fromEntries(r.store), initial);

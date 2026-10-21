@@ -50,3 +50,7 @@ Scripthub 在上述基线没有 LICENSE 文件，也没有在 README 中声明�
 `v1.2.0` 修复手动运行 RESPONSE 条目时缺少 `$request` 被误判为签到的问题：捕获规则固定传入 `capture`，没有网页上下文只提示操作；签到必须同时匹配指定 `$script.name`、完整的三个布尔参数和 `autoCheckin=true`，且不能处于网页请求或响应上下文。旧配置、参数丢失、参数类型异常一律在读取会话前停止。插件移除可选的签到确认规则，仅保留捕获与执行两个明确命名的入口。
 
 有效捕获的首次保存、更新和重复会话均调用通知接口，重复时不重新写入凭据；日志区分接口调用和实际横幅展示，后者仍由系统权限及 Loon 通知设置控制，参见 [官方通知 API](https://nsloon.app/docs/Script/script_api/)。入口隔离、旧配置误用及通知异常均使用合成数据离线测试；本轮不执行真实签到或更改设备安全设置。
+
+`v1.3.0` 增加只读签到前查询：先以保存的同一会话 GET `/board` 验证登录，再 GET `/api/attendance/board?page=1`，只以当前会话的 `record` 判断，忽略排行榜 `list`；明确未签到才 POST。参考 [tyrad/nodeseek](https://github.com/tyrad/nodeseek/tree/a4c24b58d85ce7bb152800f649ebb41ac7879cf5)（MIT）的自动签到脚本、状态解析与测试，并以 [5151561/nodyssey](https://github.com/5151561/nodyssey/tree/495997983257a83d47a3c01ffbbe4fbe7205db14)（GPL-3.0）的接口定义、资产仓库及测试交叉核对响应结构。仅研究协议事实，未复制实现或测试，也未采用其浏览器自动化或 HTTP 状态的宽泛放行。
+
+这两份公开客户端源码说明 `record: null` 表示未签到、记录对象属于当前会话；Nodyssey 的已核对说明及测试还记录了 HTTP 500 搭配 `success:false` 和“今天已完成签到，请勿重复操作”。本实现只为完整明确的重复 JSON 接受这一种 HTTP 500，仍拒绝新签到成功、模糊文本、其他 5xx、挑战及矛盾业务状态。日志新增阶段、校验后的 HTTP/JSON 数字状态码与字段类型，不输出原始值、Header、Cookie 或正文。日期、账号切换、查询失败和所有分类均离线验证；这些公开研究不能代替本项目的 Loon 实机或账号验收。
