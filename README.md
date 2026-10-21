@@ -56,17 +56,19 @@ https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/plugins/nodeseek.l
 | --- | --- | --- |
 | GLaDOS | 对应域名的 `/console/account`，例如 [glados.network 账号页](https://glados.network/console/account)；进入后刷新一次 | “新账号已保存”或“账号 Cookie 已更新”；相同 Cookie 静默跳过 |
 | V2EX | 登录域名的 `/mission/daily`，例如 [Edge 每日任务](https://edge.v2ex.com/mission/daily) | “登录会话已更新” |
-| NodeSeek | 登录后进入或刷新 [www.nodeseek.com/board](https://www.nodeseek.com/board)，无需点击签到按钮；页面捕获不发请求、不新增当日签到记录 | “登录会话已更新” |
+| NodeSeek | 登录后进入或刷新 [www.nodeseek.com/board](https://www.nodeseek.com/board)，无需点击签到按钮；页面捕获不发请求、不新增当日签到记录 | “登录会话已保存 / 已更新 / 已存在” |
 
 GLaDOS 仅在访问或刷新 `/console/account` 时抓取 Cookie，普通浏览和 `/api/user/status` 请求不会触发抓取通知。同一域名下按邮箱区分账号，同账号重新登录并抓取会更新旧 Cookie。V2EX 使用最后一次成功保存的会话，始终向该会话的原域名发送签到请求；Passkey 仅用于浏览器登录，脚本不读取或保存 Passkey。
 
 NodeSeek 每次执行签到仅向 `www.nodeseek.com` 发送一次 POST，不跟随重定向或自动重试，挑战、限流和未知响应时停止。捕获、自动签到、执行时间、奖励模式与同日跳过均可在插件参数中设置；本地去重日界按 UTC+8，具体限制见其说明。
 
+NodeSeek `v1.2.0` 仅有“会话捕获（自动触发）”与“执行签到（会发请求）”两个入口。手动运行捕获不会签到；签到必须使用完整参数及指定入口，自动签到关闭时也会阻止手动执行。`v1.1.0` 有缺少网页上下文时误入签到分支的缺陷，升级前不要手动运行旧捕获或确认条目；升级需同时更新 `.lpx` 和 JS。
+
 详细说明：[GLaDOS](scripts/glados/README.md) · [V2EX](scripts/v2ex/README.md) · [NodeSeek](scripts/nodeseek/README.md) · [Loon 插件手册](https://nsloon.app/docs/Plugin/)
 
 ## 更新与排查
 
-- **更新版本**：在 Loon 中更新远程插件及其引用的远程 JS 脚本。当前功能版本为 GLaDOS `v1.4.4`、V2EX `v1.3.1`、NodeSeek `v1.1.0`，以执行日志中的 `Version` 为准；账号数据无需为升级而清空。
+- **更新版本**：在 Loon 中更新远程插件及其引用的远程 JS 脚本。当前代码版本为 GLaDOS `v1.4.4`、V2EX `v1.3.1`、NodeSeek `v1.2.0`，以执行日志中的 `Version` 为准；账号数据无需为升级而清空。
 - **没有抓取通知**：GLaDOS 的相同 Cookie 会静默跳过，可在抓取日志中确认“Cookie 未变化，跳过抓取”。需要更新会话时，确认已登录并刷新 `/console/account`；仅在站内切换页面可能不会发起该页面请求。首次抓取仍无通知时，检查插件、脚本、MitM 和证书信任状态。插件更新或 iCloud 同步后，若请求记录只有 `域名:443` 的 TCP 连接、没有完整页面 URL，可重新连接 Loon 后再刷新页面。
 - **登录会话过期**：在原域名重新登录，再按上表操作；NodeSeek 登录后刷新 `/board` 即可更新，不需要先手动签到。
 - **链接无法下载**：确认设备能够访问 `raw.githubusercontent.com`；无法快捷唤起时，使用上面的 `.lpx` 地址手动添加。

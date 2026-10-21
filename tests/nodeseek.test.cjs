@@ -10,6 +10,9 @@ const source = readFileSync(join(__dirname, '../scripts/nodeseek/nodeseek.js'), 
 const plugin = readFileSync(join(__dirname, '../plugins/nodeseek.lpx'), 'utf8');
 const key = 'NodeSeek_Session';
 const day = '2026-10-20';
+const captureName = 'NodeSeek会话捕获_自动触发';
+const checkinName = 'NodeSeek执行签到_会发请求';
+const checkinArgument = { autoCheckin: true, random: false, useCache: true };
 const fixture = { cookie: 'session=offline-session; cf_clearance=offline-clearance', userAgent: 'offline-iPhone-Safari' };
 const success = { success: true, gain: 5, current: 120, message: '签到完成' };
 const duplicate = { success: false, message: '今天已完成签到，明天再来吧' };
@@ -27,7 +30,7 @@ const boardHTML = (config = { user: { member_id: 123, username: 'private-page-us
 const boardResponse = (extras = {}) => ({ status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', Date: 'Tue, 20 Oct 2026 02:00:00 GMT' }, body: boardHTML(), ...extras });
 
 // Only these simulated Loon APIs are exposed. No HTTP, browser, filesystem or real credentials enter the VM.
-async function run({ initial = {}, request, response: capturedResponse, reply, argument, writeOK = true,
+async function runRaw({ initial = {}, request, response: capturedResponse, reply, argument, script, writeOK = true,
   readError = false, writeError = false, notifyError = false, now = '2026-10-20T02:00:00Z', onRequest } = {}) {
   const store = new Map(Object.entries(initial));
   const calls = [], reads = [], writes = [], logs = [], notifications = [], doneValues = [];
@@ -67,6 +70,7 @@ async function run({ initial = {}, request, response: capturedResponse, reply, a
   if (request !== undefined) sandbox.$request = request;
   if (capturedResponse !== undefined) sandbox.$response = capturedResponse;
   if (argument !== undefined) sandbox.$argument = argument;
+  if (script !== undefined) sandbox.$script = script;
   vm.runInNewContext(source, sandbox, { timeout: 1000 });
   const timer = setTimeout(() => finish('timeout'), 1000);
   const outcome = await completed;
@@ -77,28 +81,134 @@ async function run({ initial = {}, request, response: capturedResponse, reply, a
   return { store, calls, reads, writes, logs: logs.join('\n'), notifications };
 }
 
+// Ordinary fixtures model a complete plugin invocation. The regression cases below
+// call runRaw directly so missing arguments/metadata remain truly absent.
+function run(settings = {}) {
+  const capturing = Object.hasOwn(settings, 'request');
+  let argument = capturing ? 'capture' : { ...checkinArgument };
+  if (Object.hasOwn(settings, 'argument')) {
+    const value = settings.argument;
+    argument = !capturing && value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...checkinArgument, ...value } : value;
+  }
+  return runRaw({ script: { name: capturing ? captureName : checkinName }, ...settings, argument });
+}
+
 const receiptOf = r => JSON.parse(r.store.get(key)).receipt;
 const outputOf = r => r.logs + JSON.stringify(r.notifications);
 
-test('plugin retains exact HTTPS attendance POST confirmation and typed reward settings', () => {
-  const rule = plugin.split('\n').find(line => line.startsWith('response if ') && line.includes('"POST"'));
-  assert.match(rule, /\$\{request\.method\} == "POST"/);
-  assert.match(rule, /\$\{response\.status\} == 200/);
-  assert.match(rule, /requires_body=true/);
-  const literal = rule.match(/\$\{url\} ~= (\/.+\/) && \$\{request\.method\}/)?.[1];
-  assert.ok(literal);
-  const matcher = new RegExp(literal.slice(1, -1));
-  for (const random of ['true', 'false']) assert.equal(matcher.test(`https://www.nodeseek.com/api/attendance?random=${random}`), true);
-  for (const url of [
-    'http://www.nodeseek.com/api/attendance?random=true', 'https://nodeseek.com/api/attendance?random=true',
-    'https://www.nodeseek.com.example.test/api/attendance?random=true', 'https://www.nodeseek.com:443/api/attendance?random=true',
-    'https://www.nodeseek.com/api/attendance?random=garbage', 'https://www.nodeseek.com/api/attendance?random=true&extra=1',
-    'https://www.nodeseek.com/board', 'https://www.deepflood.com/api/attendance?random=true',
-  ]) assert.equal(matcher.test(url), false, url);
+test('manual capture and former confirmation entries never become check-in when request context or arguments are absent', async () => {
+  for (const name of [captureName, 'NodeSeek抓包', 'NodeSeek签到确认', 'NodeSeek签到']) {
+    for (const argument of [undefined, null, '', 'capture', { random: true, useCache: false }]) {
+      const initial = saved();
+      const r = await runRaw({ initial, argument, script: { name, type: 'CRON' } });
+      assert.equal(r.calls.length + r.reads.length + r.writes.length, 0, `${name}: ${String(argument)}`);
+      assert.deepEqual(Object.fromEntries(r.store), initial);
+      assert.doesNotMatch(outputOf(r), /签到成功|成功1|单次 POST|offline-session|offline-clearance/);
+      assert.match(r.logs, /操作已阻止|捕获入口无需手动运行/);
+    }
+  }
+});
+
+test('capture intent without a complete web response only gives guidance and cannot inspect stored credentials', async () => {
+  for (const context of [{}, { request: null }, { response: boardResponse() },
+    { request: boardRequest() }, { request: boardRequest(), response: null }]) {
+    const r = await runRaw({ initial: saved(), argument: 'capture', script: { name: captureName, type: 'CRON' }, ...context });
+    assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+    assert.equal(r.notifications.length, 1);
+    assert.match(r.logs, /捕获入口无需手动运行|会话未保存/);
+    assert.doesNotMatch(r.logs, /签到成功|Reward mode|Action/);
+  }
+});
+
+test('only the named check-in entry with all explicit typed parameters can issue a POST', async () => {
+  for (const script of [undefined, null, {}, { name: captureName }, { name: 'NodeSeek签到确认' }, { name: 'NodeSeek签到' }]) {
+    const r = await runRaw({ initial: saved(), script, argument: checkinArgument });
+    assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+    assert.match(r.logs, /操作已阻止/);
+  }
+  const allowed = await runRaw({ initial: saved(), script: { name: checkinName }, argument: { ...checkinArgument, random: true } });
+  assert.equal(allowed.calls.length, 1);
+  assert.equal(allowed.calls[0].url, 'https://www.nodeseek.com/api/attendance?random=true');
+});
+
+test('missing, partial, malformed and contradictory check-in parameters fail closed before storage access', async () => {
+  for (const argument of [undefined, null, '', {}, true, false, [], 'null', '[]', 'random=true',
+    { random: true, useCache: true }, { autoCheckin: true },
+    { autoCheckin: true, random: true }, { autoCheckin: true, useCache: true },
+    { ...checkinArgument, mode: 'capture' }, { ...checkinArgument, autoCheckin: 'true' },
+    { ...checkinArgument, random: 'true' }, { ...checkinArgument, useCache: 1 },
+    JSON.stringify({ random: true, useCache: false })]) {
+    const initial = saved();
+    const r = await runRaw({ initial, script: { name: checkinName }, argument });
+    assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+    assert.deepEqual(Object.fromEntries(r.store), initial);
+    assert.match(r.logs, /入口或参数缺失|插件参数无效/);
+  }
+});
+
+test('a disabled check-in switch blocks manual execution even with the correct entry and saved session', async () => {
+  const r = await runRaw({ initial: saved(), script: { name: checkinName }, argument: { ...checkinArgument, autoCheckin: false } });
+  assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+  assert.match(r.logs, /自动签到开关未开启/);
+});
+
+test('a check-in argument misbound to a response context cannot read a session or send a second request', async () => {
+  for (const context of [{ request: null }, { response: null }, { request: boardRequest(), response: boardResponse() },
+    { request: capture(), response: response() }]) {
+    const r = await runRaw({ initial: saved(), argument: checkinArgument, script: { name: checkinName }, ...context });
+    assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+    assert.match(r.logs, /操作已阻止/);
+  }
+});
+
+test('an older plugin without an explicit capture argument cannot capture or execute a check-in', async () => {
+  for (const context of [{ request: boardRequest(), response: boardResponse() }, { request: capture(), response: response() }]) {
+    const r = await runRaw({ initial: saved(), script: { name: 'NodeSeek抓包' }, ...context });
+    assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+    assert.match(r.logs, /操作已阻止/);
+  }
+});
+
+test('first, updated and unchanged page credentials each submit one sanitized notification with no network request', async () => {
+  const oldSession = { cookie: 'session=previous-private-cookie', userAgent: 'previous-private-agent' };
+  for (const [initial, title, writes] of [
+    [{}, '登录会话已保存', 1],
+    [saved(undefined, oldSession), '登录会话已更新', 1],
+    [saved(), '登录会话已存在', 0],
+  ]) {
+    const r = await runRaw({ initial, argument: 'capture', script: { name: captureName }, request: boardRequest(), response: boardResponse() });
+    assert.equal(r.calls.length, 0);
+    assert.equal(r.writes.length, writes);
+    assert.equal(r.notifications.length, 1);
+    assert.deepEqual(r.notifications[0].slice(0, 2), ['NodeSeek', title]);
+    assert.equal(r.notifications[0].length, 3, 'no clipboard, external links or attachments');
+    assert.match(r.logs, /已调用 Loon 通知接口.*横幅显示取决于/);
+    assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone|previous-private|private-page-user/);
+    assert.equal(receiptOf(r), undefined);
+  }
+});
+
+test('page notification errors preserve both first and unchanged credentials without claiming delivery or signing in', async () => {
+  for (const initial of [{}, saved()]) {
+    const r = await runRaw({ initial, argument: 'capture', script: { name: captureName }, request: boardRequest(), response: boardResponse(), notifyError: true });
+    assert.deepEqual(JSON.parse(r.store.get(key)), fixture);
+    assert.equal(r.calls.length, 0);
+    assert.equal(r.notifications.length, 1);
+    assert.match(r.logs, /通知发送失败/);
+    assert.doesNotMatch(r.logs, /已调用 Loon 通知接口|签到成功|private-notification-error|offline-session/);
+  }
+});
+
+test('plugin exposes only capture and explicit check-in entries with complete typed settings', () => {
+  assert.equal(plugin.split('\n').filter(line => line.startsWith('response if ')).length, 1);
+  assert.doesNotMatch(plugin, /tag="NodeSeek签到确认"|request\.method\} == "POST"/);
+  assert.match(plugin, /nodeseek\.js", "capture"\).*tag="NodeSeek会话捕获_自动触发"/);
+  assert.match(plugin, /cron .*\{\$\{autoCheckin\}, \$\{random\}, \$\{useCache\}\}.*tag="NodeSeek执行签到_会发请求"/);
   assert.match(plugin, /random = switch,false,type=boolean/);
   assert.match(plugin, /useCache = switch,true,type=boolean/);
   assert.match(plugin, /cronExpression = input,"30 9 \* \* \*",type=string/);
-  assert.match(plugin, /cron \$\{cronExpression\}.*\{\$\{random\}, \$\{useCache\}\}/);
+  assert.match(plugin, /cron \$\{cronExpression\}.*\{\$\{autoCheckin\}, \$\{random\}, \$\{useCache\}\}/);
   assert.match(plugin, /hostname = www\.nodeseek\.com\s*$/);
 });
 
@@ -135,11 +245,10 @@ test('the remote plugin owns capture and schedule controls, with automatic check
   assert.deepEqual(declarations.get('autoCheckin'), { control: 'switch', initial: 'false', type: 'boolean' });
   assert.deepEqual(declarations.get('cronExpression'), { control: 'input', initial: '"30 9 * * *"', type: 'string' });
   const rules = plugin.split('\n').filter(line => /^(?:response if|cron )/.test(line));
-  assert.equal(rules.length, 3);
+  assert.equal(rules.length, 2);
   assert.match(rules[0], /enable=\$\{capture\}$/);
-  assert.match(rules[1], /enable=\$\{capture\}$/);
-  assert.match(rules[2], /^cron \$\{cronExpression\} /);
-  assert.match(rules[2], /enable=\$\{autoCheckin\}$/);
+  assert.match(rules[1], /^cron \$\{cronExpression\} /);
+  assert.match(rules[1], /enable=\$\{autoCheckin\}$/);
   for (const match of plugin.matchAll(/\$\{(capture|autoCheckin|cronExpression|random|useCache)\}/g)) {
     assert.ok(declarations.has(match[1]), `undeclared plugin argument ${match[1]}`);
   }
@@ -148,7 +257,6 @@ test('the remote plugin owns capture and schedule controls, with automatic check
 test('plugin references only repository-hosted scripts and keeps its hostname scope inside the plugin', () => {
   const paths = [...plugin.matchAll(/script\("([^"]+)"/g)].map(match => match[1]);
   assert.deepEqual(paths, [
-    'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
     'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
     'https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js',
   ]);
@@ -164,7 +272,7 @@ test('opening a logged-in board page saves only Cookie and User-Agent without si
   assert.equal(r.calls.length, 0);
   assert.deepEqual(JSON.parse(r.store.get(key)), fixture);
   assert.equal(r.writes.length, 1);
-  assert.match(outputOf(r), /登录会话已更新/);
+  assert.match(outputOf(r), /登录会话已保存/);
   assert.match(outputOf(r), /未发送签到请求/);
   assert.doesNotMatch(outputOf(r) + r.store.get(key), /private-page-user|private-unused-header|member_id/);
   assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone/);
@@ -198,7 +306,8 @@ test('board visits retain a confirmed receipt only for the unchanged session and
   const initial = saved({ day, kind: 'success' });
   const same = await run({ initial, request: boardRequest(), response: boardResponse() });
   assert.equal(same.writes.length, 0);
-  assert.equal(same.notifications.length, 0);
+  assert.equal(same.notifications.length, 1);
+  assert.equal(same.notifications[0][1], '登录会话已存在');
   assert.deepEqual(receiptOf(same), { day, kind: 'success' });
   for (const headers of [{ Cookie: 'session=other-offline-user', 'User-Agent': fixture.userAgent },
     { Cookie: fixture.cookie, 'User-Agent': 'offline-other-browser' }]) {
@@ -212,11 +321,12 @@ test('board visits retain a confirmed receipt only for the unchanged session and
   assert.equal(receiptOf(pageSaysSigned), undefined);
 });
 
-test('an unchanged page session is silent, and cron after a page capture still submits exactly one POST', async () => {
+test('an unchanged page session still notifies without writing, and explicit check-in submits exactly one POST', async () => {
   const captured = await run({ request: boardRequest(), response: boardResponse() });
   const initial = Object.fromEntries(captured.store);
   const unchanged = await run({ initial, request: boardRequest(), response: boardResponse() });
-  assert.equal(unchanged.writes.length + unchanged.notifications.length + unchanged.calls.length, 0);
+  assert.equal(unchanged.writes.length + unchanged.calls.length, 0);
+  assert.equal(unchanged.notifications.length, 1);
   assert.match(unchanged.logs, /未变化/);
   const cron = await run({ initial });
   assert.equal(cron.calls.length, 1);
@@ -291,18 +401,18 @@ test('manual success saves only local Cookie, User-Agent and confirmed receipt w
   assert.equal(r.calls.length, 0);
   assert.deepEqual(JSON.parse(r.store.get(key)), { ...fixture, receipt: { day, kind: 'success' } });
   assert.equal(r.writes.length, 1);
-  assert.match(r.logs, /登录会话已更新/);
+  assert.match(r.logs, /登录会话已保存/);
   assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone|private-/);
 });
 
 test('the statusCode field and numeric-string status are accepted on manual capture', async () => {
   for (const status of [{ statusCode: 200 }, { status: '200' }]) {
     const r = await run({ request: capture(), response: { ...status, body: JSON.stringify(success) } });
-    assert.match(r.logs, /登录会话已更新/);
+    assert.match(r.logs, /登录会话已保存/);
   }
 });
 
-test('a method omitted by the Loon callback still requires a confirmed response under the plugin POST rule', async () => {
+test('legacy explicit capture with an omitted POST method still requires a confirmed response', async () => {
   const request = capture();
   delete request.method;
   const r = await run({ request, response: response() });
@@ -312,11 +422,11 @@ test('a method omitted by the Loon callback still requires a confirmed response 
   assert.equal(invalid.calls.length + invalid.writes.length, 0);
 });
 
-test('an unchanged verified session is silent, and the next verified account replaces its receipt', async () => {
+test('an unchanged verified session notifies, and the next verified account replaces its receipt', async () => {
   const initial = saved({ day, kind: 'success' });
   const unchanged = await run({ initial, request: capture(), response: response() });
   assert.equal(unchanged.writes.length, 0);
-  assert.equal(unchanged.notifications.length, 0);
+  assert.equal(unchanged.notifications.length, 1);
   assert.match(unchanged.logs, /未变化/);
   const updated = await run({ initial, request: capture({ headers: { Cookie: 'session=new-offline-account', 'User-Agent': fixture.userAgent } }), response: response(duplicate) });
   assert.equal(JSON.parse(updated.store.get(key)).cookie, 'session=new-offline-account');
@@ -401,8 +511,8 @@ test('cron defaults to one fixed-reward POST with the captured credentials and n
   assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone/);
 });
 
-test('typed true and JSON argument objects select random rewards without nonce parameters', async () => {
-  for (const argument of [{ random: true }, JSON.stringify({ random: true, useCache: true })]) {
+test('typed true and complete JSON argument objects select random rewards without nonce parameters', async () => {
+  for (const argument of [{ random: true }, JSON.stringify({ ...checkinArgument, random: true })]) {
     const r = await run({ initial: saved(), argument });
     assert.equal(r.calls.length, 1);
     assert.equal(r.calls[0].url, 'https://www.nodeseek.com/api/attendance?random=true');
@@ -410,10 +520,10 @@ test('typed true and JSON argument objects select random rewards without nonce p
   }
 });
 
-test('Loon null arguments use the documented defaults without coercing JSON null', async () => {
+test('Loon null arguments never fall back to fixed-reward check-in', async () => {
   const r = await run({ initial: saved(), argument: null });
-  assert.equal(r.calls.length, 1);
-  assert.equal(r.calls[0].url, 'https://www.nodeseek.com/api/attendance?random=false');
+  assert.equal(r.calls.length + r.reads.length + r.writes.length, 0);
+  assert.match(r.logs, /入口或参数缺失/);
 });
 
 test('invalid settings never fall back to an unintended reward mode or send a request', async () => {
@@ -421,7 +531,7 @@ test('invalid settings never fall back to an unintended reward mode or send a re
     const r = await run({ initial: saved(), argument });
     assert.equal(r.calls.length, 0);
     assert.equal(r.writes.length, 0);
-    assert.match(r.logs, /插件参数无效/);
+    assert.match(r.logs, /插件参数无效|入口或参数缺失/);
   }
 });
 
@@ -693,7 +803,7 @@ test('a storage read failure after confirmation does not change the known server
 
 test('notification exceptions cannot turn confirmed capture or server results into failures', async () => {
   for (const entry of [
-    { request: capture(), response: response(), expected: '登录会话已更新' },
+    { request: capture(), response: response(), expected: '登录会话已保存' },
     { initial: saved(), expected: '签到成功' },
     { initial: saved(), reply: () => ({ body: duplicate }), expected: '服务端：今日已签到' },
     { expected: '签到未完成' },

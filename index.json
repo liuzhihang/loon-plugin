@@ -22,7 +22,7 @@
   {
     "name": "nodeseek",
     "file": "scripts/nodeseek/nodeseek.js",
-    "desc": "NodeSeek 单账号签到插件（进入已登录签到页保存会话，支持定时与奖励模式）",
+    "desc": "NodeSeek 单账号签到插件（捕获与执行两个独立入口，缺参不签到，支持固定或随机奖励）",
     "author": "liuzhihang",
     "maintainer": "liuzhihang",
     "platforms": ["Loon"],

@@ -1,6 +1,6 @@
 /*
  * NodeSeek 自动签到 — 独立的 Loon 实现
- * Version: v1.1.0 | Updated: 2026-10-21
+ * Version: v1.2.0 | Updated: 2026-10-21
  * Author / Maintainer: liuzhihang
  * https://github.com/liuzhihang/loon-plugin
  * SPDX-License-Identifier: MIT
@@ -11,12 +11,13 @@
  * 公开接口及许可研究见 README.md 与仓库 UPSTREAM.md，未复制第三方实现。
  */
 
-var SCRIPT_VERSION = "v1.1.0";
+var SCRIPT_VERSION = "v1.2.0";
 var SESSION_KEY = "NodeSeek_Session";
 var ORIGIN = "https://www.nodeseek.com";
 var BOARD_URL = /^https:\/\/www\.nodeseek\.com\/board\/?(?:\?[^#]*)?$/;
 var ATTENDANCE_URL = /^https:\/\/www\.nodeseek\.com\/api\/attendance\?random=(?:true|false)$/;
-var isCapture = typeof $request !== "undefined";
+var CHECKIN_NAME = "NodeSeek执行签到_会发请求";
+var entryKind = "Blocked";
 
 // 日界是本地去重策略（UTC+8），并非从接口获取的服务端日期。
 function dayAt(timestamp) {
@@ -34,7 +35,10 @@ function field(label, value) {
 function announce(title, detail) {
   field("Status", title);
   if (detail) field("Message", detail);
-  try { $notification.post("NodeSeek", title, detail || ""); }
+  try {
+    $notification.post("NodeSeek", title, detail || "");
+    field("Notification", "已调用 Loon 通知接口；横幅显示取决于系统权限与 Loon 通知设置");
+  }
   catch (_) { field("Notification", "通知发送失败，请以执行日志为准"); }
 }
 
@@ -46,6 +50,8 @@ function fail(code) {
 
 // 所有外部响应和异常只参与分类，不把原始文本写入日志或通知。
 var REASONS = {
+  entry: "入口或参数缺失、不匹配，已停止；请同时更新插件与脚本，勿单独手动运行旧捕获条目；本次未读取本地会话、未发签到请求",
+  disabled: "自动签到开关未开启，已阻止执行；本次未读取本地会话、未发签到请求",
   session: "尚无有效本地会话；请在浏览器登录 www.nodeseek.com 后进入或刷新签到页 /board",
   invalidSession: "本地会话格式无效；请重新登录并刷新签到页 /board 以更新会话",
   headers: "缺少有效 Cookie 或浏览器 User-Agent；原有会话保留",
@@ -62,7 +68,7 @@ var REASONS = {
   unknown: "服务端未明确确认签到；请在官网核实，本次不自动重试",
   network: "网络请求失败或超时；签到结果不确定，请在官网核实，本次不自动重试",
   storage: "本地存储读取或写入失败；原有会话未主动清除",
-  arguments: "插件参数无效；random 和 useCache 必须为布尔值，请检查插件设置",
+  arguments: "插件参数无效；autoCheckin、random 和 useCache 必须为布尔值，本次未读取会话、未发签到请求",
   runtime: "脚本执行异常；请检查 Loon 脚本环境，本次不自动重试"
 };
 
@@ -103,18 +109,16 @@ function sessionFrom(raw) {
   return session;
 }
 
-function options() {
-  var value = typeof $argument === "undefined" || $argument === null || $argument === "" ? {} : $argument;
+function options(value) {
   if (typeof value === "string") value = parseJSON(value);
-  if (!value || typeof value !== "object" || Array.isArray(value)) fail("arguments");
-  var result = { random: false, useCache: true };
-  for (var key in result) {
-    if (Object.prototype.hasOwnProperty.call(value, key)) {
-      if (typeof value[key] !== "boolean") fail("arguments");
-      result[key] = value[key];
-    }
-  }
-  return result;
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail("entry");
+  var keys = Object.keys(value);
+  if (keys.length !== 3 || keys.some(function (key) {
+    return key !== "autoCheckin" && key !== "random" && key !== "useCache";
+  })) fail("entry");
+  if (typeof value.autoCheckin !== "boolean" || typeof value.random !== "boolean" || typeof value.useCache !== "boolean") fail("arguments");
+  if (value.autoCheckin !== true) fail("disabled");
+  return { random: value.random, useCache: value.useCache };
 }
 
 function statusCode(response) {
@@ -257,13 +261,13 @@ function capture() {
   if (!page && isFinite(age) && age >= 0 && age <= 5 * 60 * 1000) session.receipt = { day: dayAt(timestamp), kind: result.kind };
   var encoded = JSON.stringify(session);
   if (previous === encoded) {
-    field("Status", "登录会话未变化，跳过保存");
+    announce("登录会话已存在", "Cookie 与 User-Agent 未变化，跳过重复写入；本次未发送签到请求");
     return;
   }
   if (!writeValue(encoded)) fail("storage");
   var detail = page ? "已从已登录签到页保存本地会话；本次未发送签到请求，也不新增今日签到记录" :
     session.receipt ? "已验证手动签到响应；只在本地保存会话和当日结果记录" : "已验证并保存本地会话；缺少可信响应日期，本次不建立同日跳过记录";
-  announce("登录会话已更新", detail);
+  announce(oldSession ? "登录会话已更新" : "登录会话已保存", detail);
 }
 
 function submit(session, random) {
@@ -306,8 +310,7 @@ function recordReceipt(session, day, kind) {
   } catch (_) { return false; }
 }
 
-function checkin() {
-  var settings = options();
+function checkin(settings) {
   var raw = readValue();
   if (!raw) fail("session");
   var session = sessionFrom(raw);
@@ -336,13 +339,35 @@ function checkin() {
   });
 }
 
+function execute() {
+  var argument = typeof $argument === "undefined" ? undefined : $argument;
+  // 捕获用途由规则里的固定参数指定，不能用缺少 $request 来推断需要签到。
+  if (argument === "capture") {
+    entryKind = "Capture";
+    field("Entry", "会话捕获；不发送签到请求");
+    if (typeof $request === "undefined" || !$request) {
+      announce("捕获入口无需手动运行", "请在已登录的浏览器进入或刷新 /board；此处需要网页响应，本次未读取会话、未发签到请求");
+      return;
+    }
+    if (typeof $response === "undefined" || !$response) fail("response");
+    return capture();
+  }
+  // 名称和完整的显式参数都符合签到入口时才允许读会话、发 POST。
+  // 旧插件、缺参的手动运行及错误绑定一律停止，不默认采用固定奖励。
+  var name = typeof $script !== "undefined" && $script && $script.name;
+  if (name !== CHECKIN_NAME || typeof $request !== "undefined" || typeof $response !== "undefined") fail("entry");
+  entryKind = "Checkin";
+  field("Entry", "执行签到；参数验证后才允许发送请求");
+  return checkin(options(argument));
+}
+
 console.log("🚀 NodeSeek Script Start");
-field("Version", SCRIPT_VERSION + " | Loon | " + (isCapture ? "Capture" : "Cron"));
+field("Version", SCRIPT_VERSION + " | Loon");
 Promise.resolve().then(function () {
-  return isCapture ? capture() : checkin();
+  return execute();
 }).catch(function (error) {
   var code = error && error.code;
   var detail = Object.prototype.hasOwnProperty.call(REASONS, code) ? REASONS[code] : REASONS.runtime;
-  if (!isCapture) field("Summary", "成功0 服务端重复0 本地跳过0 失败1");
-  announce(isCapture ? "会话未保存，原有会话保留" : "签到未完成", detail);
+  if (entryKind === "Checkin") field("Summary", "成功0 服务端重复0 本地跳过0 失败1");
+  announce(entryKind === "Capture" ? "会话未保存，原有会话保留" : entryKind === "Checkin" ? "签到未完成" : "操作已阻止", detail);
 }).then(function () { $done({}); }, function () { $done({}); });

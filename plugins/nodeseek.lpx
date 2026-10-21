@@ -1,5 +1,5 @@
 #!name=NodeSeek 自动签到
-#!desc=进入已登录签到页即可保存会话，再在插件参数开启自动签到；支持固定或随机奖励
+#!desc=两个入口：进入已登录签到页自动捕获会话；开启后由明确的签到入口发送请求
 #!author=liuzhihang（独立实现与维护）
 #!homepage=https://github.com/liuzhihang/loon-plugin
 #!tag=Check-in
@@ -9,15 +9,14 @@
 
 [Argument]
 capture = switch,true,type=boolean,tag=捕获登录会话,desc=在浏览器进入或刷新已登录的签到页 /board 即可保存会话，无需先签到；保存后可关闭
-autoCheckin = switch,false,type=boolean,tag=自动签到,desc=首次保存会话后开启；关闭时不运行定时签到
+autoCheckin = switch,false,type=boolean,tag=自动签到,desc=保存会话后开启；关闭时同时阻止定时和手动执行签到入口
 cronExpression = input,"30 9 * * *",type=string,tag=执行时间,desc=设备本地时间的 Cron 表达式；默认每天 09:30
 random = switch,false,type=boolean,tag=随机奖励,desc=关闭发送 random=false；开启发送 random=true；实际奖励以服务端为准
 useCache = switch,true,type=boolean,tag=同日跳过,desc=按 UTC+8 的本地确认记录避免重复请求；关闭后每次运行均向服务端提交一次
 
 [Script]
-response if ${url} ~= /^https:\/\/www\.nodeseek\.com\/board\/?(?:\?[^#]*)?$/ && ${request.method} == "GET" && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js") with requires_body=true, timeout=10, tag="NodeSeek抓包", enable=${capture}
-response if ${url} ~= /^https:\/\/www\.nodeseek\.com\/api\/attendance\?random=(?:true|false)$/ && ${request.method} == "POST" && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js") with requires_body=true, timeout=10, tag="NodeSeek签到确认", enable=${capture}
-cron ${cronExpression} then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js", {${random}, ${useCache}}) with timeout=30, tag="NodeSeek签到", enable=${autoCheckin}
+response if ${url} ~= /^https:\/\/www\.nodeseek\.com\/board\/?(?:\?[^#]*)?$/ && ${request.method} == "GET" && ${response.status} == 200 then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js", "capture") with requires_body=true, timeout=10, tag="NodeSeek会话捕获_自动触发", enable=${capture}
+cron ${cronExpression} then script("https://raw.githubusercontent.com/liuzhihang/loon-plugin/main/scripts/nodeseek/nodeseek.js", {${autoCheckin}, ${random}, ${useCache}}) with timeout=30, tag="NodeSeek执行签到_会发请求", enable=${autoCheckin}
 
 [MITM]
 hostname = www.nodeseek.com
