@@ -32,11 +32,11 @@ function field(label, value) {
   console.log((label + "              ").slice(0, 14) + ": " + value);
 }
 
-function announce(title, detail) {
+function announce(title, detail, notificationDetail) {
   field("Status", title);
   if (detail) field("Message", detail);
   try {
-    $notification.post("NodeSeek", title, detail || "");
+    $notification.post("NodeSeek", title, notificationDetail === undefined ? detail || "" : notificationDetail);
     field("Notification", "已调用 Loon 通知接口；横幅显示取决于系统权限与 Loon 通知设置");
   }
   catch (_) { field("Notification", "通知发送失败，请以执行日志为准"); }
@@ -261,13 +261,13 @@ function capture() {
   if (!page && isFinite(age) && age >= 0 && age <= 5 * 60 * 1000) session.receipt = { day: dayAt(timestamp), kind: result.kind };
   var encoded = JSON.stringify(session);
   if (previous === encoded) {
-    announce("登录会话已存在", "Cookie 与 User-Agent 未变化，跳过重复写入；本次未发送签到请求");
+    announce("登录会话已存在", "Cookie 与 User-Agent 未变化，跳过重复写入；本次未发送签到请求", "无需重复保存");
     return;
   }
   if (!writeValue(encoded)) fail("storage");
   var detail = page ? "已从已登录签到页保存本地会话；本次未发送签到请求，也不新增今日签到记录" :
     session.receipt ? "已验证手动签到响应；只在本地保存会话和当日结果记录" : "已验证并保存本地会话；缺少可信响应日期，本次不建立同日跳过记录";
-  announce(oldSession ? "登录会话已更新" : "登录会话已保存", detail);
+  announce(oldSession ? "登录会话已更新" : "登录会话已保存", detail, "已保存到本地");
 }
 
 function submit(session, random) {
@@ -319,7 +319,7 @@ function checkin(settings) {
   field("Reward mode", settings.random ? "随机奖励（random=true）" : "固定奖励（random=false）");
   if (settings.useCache && session.receipt && session.receipt.day === day) {
     field("Summary", "成功0 服务端重复0 本地跳过1 失败0");
-    announce("本地记录：今日已有确认结果", "本次未请求服务器；记录来自" + (session.receipt.kind === "success" ? "签到成功响应" : "服务端已完成签到响应") + "，日界按 UTC+8");
+    announce("本地记录：今日已有确认结果", "本次未请求服务器；记录来自" + (session.receipt.kind === "success" ? "签到成功响应" : "服务端已完成签到响应") + "，日界按 UTC+8", "已跳过重复执行");
     return;
   }
 
@@ -333,9 +333,14 @@ function checkin(settings) {
     } else {
       details.push("服务端明确返回已完成签到；本次未计为新奖励");
     }
-    if (!recorded) details.push("本地记录未保存或会话已变化；请勿连续运行，先在官网核实");
+    var notificationDetail = result.kind === "success" ? details.join("；") : "无需重复签到";
+    if (!recorded) {
+      var warning = "本地记录未保存或会话已变化；请勿连续运行，先在官网核实";
+      details.push(warning);
+      notificationDetail += (notificationDetail ? "；" : "") + warning;
+    }
     field("Summary", result.kind === "success" ? "成功1 服务端重复0 本地跳过0 失败0" : "成功0 服务端重复1 本地跳过0 失败0");
-    announce(result.kind === "success" ? "签到成功" : "服务端：今日已签到", details.join("；"));
+    announce(result.kind === "success" ? "签到成功" : "服务端：今日已签到", details.join("；"), notificationDetail);
   });
 }
 
@@ -346,7 +351,7 @@ function execute() {
     entryKind = "Capture";
     field("Entry", "会话捕获；不发送签到请求");
     if (typeof $request === "undefined" || !$request) {
-      announce("捕获入口无需手动运行", "请在已登录的浏览器进入或刷新 /board；此处需要网页响应，本次未读取会话、未发签到请求");
+      announce("捕获入口无需手动运行", "请在已登录的浏览器进入或刷新 /board；此处需要网页响应，本次未读取会话、未发签到请求", "请在已登录的浏览器进入或刷新 /board");
       return;
     }
     if (typeof $response === "undefined" || !$response) fail("response");

@@ -118,6 +118,10 @@ test('capture intent without a complete web response only gives guidance and can
     assert.equal(r.notifications.length, 1);
     assert.match(r.logs, /捕获入口无需手动运行|会话未保存/);
     assert.doesNotMatch(r.logs, /签到成功|Reward mode|Action/);
+    if (!context.request) {
+      assert.equal(r.notifications[0][2], '请在已登录的浏览器进入或刷新 /board');
+      assert.match(r.logs, /本次未读取会话、未发签到请求/);
+    }
   }
 });
 
@@ -172,17 +176,18 @@ test('an older plugin without an explicit capture argument cannot capture or exe
 
 test('first, updated and unchanged page credentials each submit one sanitized notification with no network request', async () => {
   const oldSession = { cookie: 'session=previous-private-cookie', userAgent: 'previous-private-agent' };
-  for (const [initial, title, writes] of [
-    [{}, '登录会话已保存', 1],
-    [saved(undefined, oldSession), '登录会话已更新', 1],
-    [saved(), '登录会话已存在', 0],
+  for (const [initial, title, detail, writes] of [
+    [{}, '登录会话已保存', '已保存到本地', 1],
+    [saved(undefined, oldSession), '登录会话已更新', '已保存到本地', 1],
+    [saved(), '登录会话已存在', '无需重复保存', 0],
   ]) {
     const r = await runRaw({ initial, argument: 'capture', script: { name: captureName }, request: boardRequest(), response: boardResponse() });
     assert.equal(r.calls.length, 0);
     assert.equal(r.writes.length, writes);
     assert.equal(r.notifications.length, 1);
-    assert.deepEqual(r.notifications[0].slice(0, 2), ['NodeSeek', title]);
+    assert.deepEqual(r.notifications[0], ['NodeSeek', title, detail]);
     assert.equal(r.notifications[0].length, 3, 'no clipboard, external links or attachments');
+    assert.match(r.logs, /本次未发送签到请求/);
     assert.match(r.logs, /已调用 Loon 通知接口.*横幅显示取决于/);
     assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone|previous-private|private-page-user/);
     assert.equal(receiptOf(r), undefined);
@@ -508,6 +513,7 @@ test('cron defaults to one fixed-reward POST with the captured credentials and n
   assert.deepEqual(receiptOf(r), { day, kind: 'success' });
   assert.match(r.logs, /成功1 服务端重复0 本地跳过0 失败0/);
   assert.match(outputOf(r), /获得 5 个鸡腿.*当前 120 个鸡腿/);
+  assert.equal(r.notifications[0][2], '获得 5 个鸡腿；当前 120 个鸡腿');
   assert.doesNotMatch(outputOf(r), /offline-session|offline-clearance|offline-iPhone/);
 });
 
@@ -543,8 +549,8 @@ test('same-day cache is distinct from a server duplicate and makes no network re
     assert.equal(r.writes.length, 0);
     assert.deepEqual(Object.fromEntries(r.store), initial);
     assert.match(r.logs, /成功0 服务端重复0 本地跳过1 失败0/);
-    assert.match(outputOf(r), /本次未请求服务器/);
-    assert.doesNotMatch(r.notifications[0][1], /签到成功|服务端：今日已签到/);
+    assert.match(r.logs, /本次未请求服务器/);
+    assert.deepEqual(r.notifications[0], ['NodeSeek', '本地记录：今日已有确认结果', '已跳过重复执行']);
   }
 });
 
@@ -643,6 +649,8 @@ test('explicit already-completed responses are classified separately and cached 
     assert.deepEqual(receiptOf(r), { day, kind: 'duplicate' });
     assert.match(r.logs, /成功0 服务端重复1 本地跳过0 失败0/);
     assert.equal(r.notifications[0][1], '服务端：今日已签到');
+    assert.equal(r.notifications[0][2], '无需重复签到');
+    assert.match(r.logs, /服务端明确返回已完成签到；本次未计为新奖励/);
     assert.doesNotMatch(outputOf(r), /获得 5 个鸡腿/);
   }
 });
@@ -784,7 +792,8 @@ test('failed persistence after a confirmed result preserves the server outcome a
       assert.equal(r.calls.length, 1);
       assert.deepEqual(Object.fromEntries(r.store), initial);
       assert.equal(r.notifications[0][1], body.success ? '签到成功' : '服务端：今日已签到');
-      assert.match(outputOf(r), /本地记录未保存/);
+      assert.match(r.notifications[0][2], /本地记录未保存或会话已变化；请勿连续运行，先在官网核实/);
+      assert.doesNotMatch(r.notifications[0][2], /本次未计为新奖励/);
       assert.doesNotMatch(outputOf(r), /private-/);
     }
   }
