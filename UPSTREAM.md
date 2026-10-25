@@ -17,7 +17,7 @@ Loon 来源的原始 MIT 许可证完整保留于 [licenses/Loon-MIT.txt](licens
 
 ## 维护范围
 
-上述表格记录合并时的范围。2026-09-27 按实际使用范围精简后，已移除蛋蛋不语及其他未接入的上游脚本、`rules/` 和 `profile/`。当时只保留 GLaDOS 和 V2EX 两个插件、对应脚本、说明和测试；2026-10-20 新增 NodeSeek 插件，2026-10-25 新增网鱼插件。删除未重写 Git 历史，原文件仍可从合并基线和后续提交中追溯。
+上述表格记录合并时的范围。2026-09-27 按实际使用范围精简后，已移除蛋蛋不语及其他未接入的上游脚本、`rules/` 和 `profile/`。当时只保留 GLaDOS 和 V2EX 两个插件、对应脚本、说明和测试；2026-10-20 新增 NodeSeek 插件。删除未重写 Git 历史，原文件仍可从合并基线和后续提交中追溯。
 
 Scripthub 在上述基线没有 LICENSE 文件，也没有在 README 中声明开源许可证。本仓库保留 GitHub fork 关系和原有声明，不将这部分代码重新标记为 MIT。公开仓库可见性和 fork 功能不等同于授予任意再许可的权利。
 
@@ -54,17 +54,3 @@ Scripthub 在上述基线没有 LICENSE 文件，也没有在 README 中声明�
 `v1.3.0` 增加只读签到前查询：先以保存的同一会话 GET `/board` 验证登录，再 GET `/api/attendance/board?page=1`，只以当前会话的 `record` 判断，忽略排行榜 `list`；明确未签到才 POST。参考 [tyrad/nodeseek](https://github.com/tyrad/nodeseek/tree/a4c24b58d85ce7bb152800f649ebb41ac7879cf5)（MIT）的自动签到脚本、状态解析与测试，并以 [5151561/nodyssey](https://github.com/5151561/nodyssey/tree/495997983257a83d47a3c01ffbbe4fbe7205db14)（GPL-3.0）的接口定义、资产仓库及测试交叉核对响应结构。仅研究协议事实，未复制实现或测试，也未采用其浏览器自动化或 HTTP 状态的宽泛放行。
 
 这两份公开客户端源码说明 `record: null` 表示未签到、记录对象属于当前会话；Nodyssey 的已核对说明及测试还记录了 HTTP 500 搭配 `success:false` 和“今天已完成签到，请勿重复操作”。本实现只为完整明确的重复 JSON 接受这一种 HTTP 500，仍拒绝新签到成功、模糊文本、其他 5xx、挑战及矛盾业务状态。日志新增阶段、校验后的 HTTP/JSON 数字状态码与字段类型，不输出原始值、Header、Cookie 或正文。日期、账号切换、查询失败和所有分类均离线验证；这些公开研究不能代替本项目的 Loon 实机或账号验收。
-
-## F1sh 接口研究
-
-核对日期：2026-10-25。网鱼插件、脚本和测试的作者与维护人为 liuzhihang，文件范围使用 [licenses/F1sh-MIT.txt](licenses/F1sh-MIT.txt)。只研究公开页面协议事实，没有复制站点代码。
-
-| 只读研究来源 | 核对结果 | 许可与使用范围 |
-| --- | --- | --- |
-| [网鱼签到页](https://f1sh.com/checkin) 与公开的 [checkin.js](https://static.pancdn.net/assets/js/checkin.js?v=3369bb)、[AuthParts.js](https://static.pancdn.net/assets/js/AuthParts.js?v=3369bb) | 页面显示当前会话是否已签到；提交表单是 `POST /checkin`，包含 `csrf_token` 与可选 `mood`；页面使用 `pd-ck-head`、`pd-ck-done` 和 `pd-ck-stats` 标记 | 仅核对公开接口、表单字段与 DOM 标记，不复制页面实现 |
-| 网鱼公开签到规则与页面响应 | 公开规则以北京时间自然日为准；匿名页面响应使用 `private, no-store` 并设置 `pd_csrf` Cookie | 已登录的 Chrome 页面只读核对了 DOM 结构；原始响应中的 CSRF 值被工具遮蔽，未读取 Cookie、未提交签到，也未验收原始 HTTP 响应 |
-| [Loon 插件手册](https://nsloon.app/docs/Plugin/)、[Script v2](https://nsloon.app/docs/Script/script_v2/)、[Script API](https://nsloon.app/docs/Script/script_api/) | Loon 3.5.1（983）起支持本插件使用的新版入口语法；参考新版脚本参数、请求与本地存储 API | 仅参考 Loon 配置与 API 说明 |
-
-网鱼插件 `v1.0.0`（2026-10-25）每次先读取 `/checkin` 页面，只有确认已登录、服务端日期有效且明确未签到时才提交一次；随后只对预期同源结果重新请求固定 `/checkin` 页面，并以已签到标记确认。不会使用本地签到成功缓存、自动重试或任意重定向。捕获的原始 Cookie（可能含 `pd_csrf`）与 User-Agent 保存在设备本地；脚本不单独保存表单 CSRF token 或响应正文。签到时若响应更新 `pd_csrf`，新值只在本次运行中使用；若没有更新，则 Cookie 内现有值必须与表单 token 匹配，否则停止。自动签到默认关闭。已登录态 DOM 的只读核对和离线模拟不等于原始 HTTP 响应验收；本轮未执行真实签到或 Loon 实机验收。
-
-签到仅使用网站本身的每日签到流程；不会补签、购买补签卡或单独操作彩票。奖励与签到附赠由网站处理。本实现的许可仅涵盖新增的网鱼脚本、插件、测试与说明，不改变既有文件的许可范围。
