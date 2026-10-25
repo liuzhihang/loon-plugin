@@ -28,5 +28,15 @@
     "platforms": ["Loon"],
     "cron": "30 9 * * *",
     "updated": "2026-10-21"
+  },
+  {
+    "name": "f1sh",
+    "file": "scripts/f1sh/f1sh.js",
+    "desc": "网鱼（f1sh.com）单账号每日签到；先查询服务端状态，仅未签到时提交并回查确认",
+    "author": "liuzhihang",
+    "maintainer": "liuzhihang",
+    "platforms": ["Loon"],
+    "cron": "35 9 * * *",
+    "updated": "2026-10-25"
   }
 ]

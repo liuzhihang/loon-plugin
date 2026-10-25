@@ -1,5 +1,5 @@
 /*
- * NodeSeek 自动签到 — 独立的 Loon 实现
+ * NodeSeek 自动签到
  * Version: v1.3.0 | Updated: 2026-10-21
  * Author / Maintainer: liuzhihang
  * https://github.com/liuzhihang/loon-plugin

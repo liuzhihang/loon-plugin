@@ -1,6 +1,6 @@
 # NodeSeek 自动签到
 
-作者与维护：[liuzhihang](https://github.com/liuzhihang)。这是独立编写的单账号 Loon 插件，仅支持 `https://www.nodeseek.com`，不包含 DeepFlood、多账号、账号密码登录或验证码服务。
+作者与维护：[liuzhihang](https://github.com/liuzhihang)。这是单账号 Loon 插件，仅支持 `https://www.nodeseek.com`，不包含 DeepFlood、多账号、账号密码登录或验证码服务。
 
 ## 安装与首次启用
 
@@ -104,12 +104,12 @@ Mac Chrome 也可用于捕获，前提是该浏览器流量实际经过 Mac 上�
 | [NodeSeek Pro v1.0.8](https://greasyfork.org/zh-CN/scripts/567109-nodeseek-pro/code) | POST 路径、布尔奖励参数、`success` / `gain` / `current` / `message` 字段；浏览器 `credentials: include`；`temp-script` 的 Base64 JSON 和 `__config__.user.member_id` 页面结构 | 源码声明 GPL-3.0；未复制其实现。其在判断成功前写入当日日期的逻辑未采用 |
 | [dragonff/NodeSeek](https://github.com/dragonff/NodeSeek/tree/39091eb5aab0a83439e8abd8f94456e503fa9ac3) | [Python](https://github.com/dragonff/NodeSeek/blob/39091eb5aab0a83439e8abd8f94456e503fa9ac3/nodeseek_sign.py) 的 JSON `{}` 请求体和“已完成签到”语义；与 Worker 参数进行对比 | 该基线根目录未提供许可证，README 的徽章链接到另一仓库，不视为本仓库授权；未复制代码。未采用 Worker 的随机字符串参数、验证码服务、登录或请求伪装机制 |
 | [Loon 插件文档](https://nsloon.app/docs/Plugin/)、[Script API](https://nsloon.app/docs/Script/script_api/) | 新版脚本入口、布尔参数绑定、`$argument` 对象和空参数、毫秒请求超时、Cookie 与重定向开关 | 仅参考配置与 API 说明 |
-| [tyrad/nodeseek 基线](https://github.com/tyrad/nodeseek/tree/a4c24b58d85ce7bb152800f649ebb41ac7879cf5) 的 `AutoCheckInAutomationScript.swift`、`NodeSeekAttendanceParser.swift` 与测试 | 2026-10-21 只读核对 GET `/api/attendance/board?page=1`，`record: null` 与当前会话记录的含义，排行榜 `list` 与个人状态分离 | 根目录 MIT；仅参考接口与响应结构，独立实现，未移植代码 |
+| [tyrad/nodeseek 基线](https://github.com/tyrad/nodeseek/tree/a4c24b58d85ce7bb152800f649ebb41ac7879cf5) 的 `AutoCheckInAutomationScript.swift`、`NodeSeekAttendanceParser.swift` 与测试 | 2026-10-21 只读核对 GET `/api/attendance/board?page=1`，`record: null` 与当前会话记录的含义，排行榜 `list` 与个人状态分离 | 根目录 MIT；仅参考接口与响应结构，未移植代码 |
 | [5151561/nodyssey 基线](https://github.com/5151561/nodyssey/tree/495997983257a83d47a3c01ffbbe4fbe7205db14) 的 `NodeSeekJsonClient.kt`、`AssetsRepository.kt` 与测试 | 交叉核对同一只读端点、个人 `record`、HTTP 500 重复签到和“今天已完成签到，请勿重复操作”；该项目注明其在线核对背景，本项目未使用账号复验 | 根目录 GPL-3.0；仅研究协议事实，不复制代码、测试或其宽泛的非 2xx 判定 |
 
 2026-10-21 在 Chrome `/board` 页面进行只读结构核对：初始化脚本读取 Base64 JSON 后移除 `temp-script`，正常页面包含 Cloudflare 检测资源。未读取 Cookie 值、未执行签到；原始响应数据解析与 Loon 实际捕获通知尚未验收，页面捕获逻辑使用合成数据离线回归。
 
-本目录、新增 `plugins/nodeseek.lpx` 和 `tests/nodeseek.test.cjs` 的独立实现使用 [MIT 许可证](../../licenses/NodeSeek-MIT.txt)。此声明不改变 GLaDOS、V2EX 或其他上游文件的许可；完整来源边界见 [UPSTREAM.md](../../UPSTREAM.md) 与 [LICENSE.md](../../LICENSE.md)。
+本目录、新增 `plugins/nodeseek.lpx` 和 `tests/nodeseek.test.cjs` 使用 [MIT 许可证](../../licenses/NodeSeek-MIT.txt)。公开源码仅用于核对接口行为，没有复制第三方代码。此声明不改变 GLaDOS、V2EX 或其他上游文件的许可；完整来源边界见 [UPSTREAM.md](../../UPSTREAM.md) 与 [LICENSE.md](../../LICENSE.md)。
 
 ## 离线验证
 

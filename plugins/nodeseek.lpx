@@ -1,6 +1,6 @@
 #!name=NodeSeek 自动签到
 #!desc=进入已登录签到页自动捕获会话；定时先查询签到状态，仅未签到时提交
-#!author=liuzhihang（独立实现与维护）
+#!author=liuzhihang
 #!homepage=https://github.com/liuzhihang/loon-plugin
 #!tag=Check-in
 #!loon_version=3.5.1(983)
